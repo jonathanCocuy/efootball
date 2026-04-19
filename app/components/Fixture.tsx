@@ -37,7 +37,7 @@ function getFaseName(n: number): string {
   return 'Ronda 1';
 }
 
-const FASE_ORDER = ['Grupo A', 'Grupo B', 'Repechaje', 'Ronda 1', 'Octavos de Final', 'Cuartos de Final', 'Semifinal', 'Final'];
+const FASE_ORDER = ['Grupo A', 'Grupo B', 'Repechaje', 'Ronda 1', 'Octavos de Final', 'Cuartos de Final', 'Semifinal', '3er Puesto', 'Final'];
 
 function sortFases(fases: string[]): string[] {
   return [...fases].sort((a, b) => {
@@ -111,8 +111,13 @@ function getAggregateWinners(fasePartidos: Partido[]): string[] | null {
     for (const m of unicos) {
       if (!m.completado) return null;
       const gl = m.golesLocal ?? 0, gv = m.golesVisitante ?? 0;
-      if (gl === gv) return null;
-      winners.push(gl > gv ? m.equipoLocal : m.equipoVisitante);
+      if (gl === gv) {
+        const pl = m.penalesLocal ?? 0, pv = m.penalesVisitante ?? 0;
+        if (pl === pv) return null;
+        winners.push(pl > pv ? m.equipoLocal : m.equipoVisitante);
+      } else {
+        winners.push(gl > gv ? m.equipoLocal : m.equipoVisitante);
+      }
     }
     return winners;
   }
@@ -125,10 +130,20 @@ function getAggregateWinners(fasePartidos: Partido[]): string[] | null {
     if (!vuelta || !ida.completado || !vuelta.completado) return null;
     const golesA = (ida.golesLocal ?? 0) + (vuelta.golesVisitante ?? 0);
     const golesB = (ida.golesVisitante ?? 0) + (vuelta.golesLocal ?? 0);
-    if (golesA === golesB) return null;
-    winners.push(golesA > golesB ? ida.equipoLocal : ida.equipoVisitante);
+    if (golesA === golesB) {
+      const pl = vuelta.penalesLocal ?? 0, pv = vuelta.penalesVisitante ?? 0;
+      if (pl === pv) return null;
+      winners.push(pl > pv ? vuelta.equipoLocal : vuelta.equipoVisitante);
+    } else {
+      winners.push(golesA > golesB ? ida.equipoLocal : ida.equipoVisitante);
+    }
   }
   return winners.length > 0 ? winners : null;
+}
+
+function getAggregateLosers(fasePartidos: Partido[], winners: string[]): string[] {
+  const equipos = [...new Set([...fasePartidos.map(p => p.equipoLocal), ...fasePartidos.map(p => p.equipoVisitante)])];
+  return equipos.filter(e => !winners.includes(e));
 }
 
 function formatDate(iso: string) {
@@ -156,30 +171,39 @@ function getFaseActual(partidos: Partido[]): string {
 
 // ─── Sub-component: MatchCard ─────────────────────────────────────────────────
 
-function MatchCard({ partido, onUpdate }: {
+function MatchCard({ partido, jugadores, onUpdate }: {
   partido: Partido;
-  onUpdate: (id: string, gl: number, gv: number) => Promise<void>;
+  jugadores: Record<string, string>;
+  onUpdate: (id: string, gl: number, gv: number, pl?: number, pv?: number) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(!partido.completado);
   const [gl, setGl] = useState(partido.golesLocal?.toString() ?? '');
   const [gv, setGv] = useState(partido.golesVisitante?.toString() ?? '');
+  const [pl, setPl] = useState(partido.penalesLocal?.toString() ?? '');
+  const [pv, setPv] = useState(partido.penalesVisitante?.toString() ?? '');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setGl(partido.golesLocal?.toString() ?? '');
     setGv(partido.golesVisitante?.toString() ?? '');
+    setPl(partido.penalesLocal?.toString() ?? '');
+    setPv(partido.penalesVisitante?.toString() ?? '');
     if (partido.completado) setEditing(false);
   }, [partido]);
 
   const w = partido.completado
     ? (partido.golesLocal ?? 0) > (partido.golesVisitante ?? 0) ? 'local'
-      : (partido.golesVisitante ?? 0) > (partido.golesLocal ?? 0) ? 'visitante' : 'draw'
+      : (partido.golesVisitante ?? 0) > (partido.golesLocal ?? 0) ? 'visitante'
+        : (partido.penalesLocal ?? 0) > (partido.penalesVisitante ?? 0) ? 'local'
+          : (partido.penalesVisitante ?? 0) > (partido.penalesLocal ?? 0) ? 'visitante' : 'draw'
     : null;
 
   const handleSave = async () => {
     if (gl === '' || gv === '' || !partido.id) return;
     setSaving(true);
-    await onUpdate(partido.id, parseInt(gl), parseInt(gv));
+    const penaltiesL = pl !== '' ? parseInt(pl) : undefined;
+    const penaltiesV = pv !== '' ? parseInt(pv) : undefined;
+    await onUpdate(partido.id, parseInt(gl), parseInt(gv), penaltiesL, penaltiesV);
     setSaving(false);
   };
 
@@ -188,13 +212,16 @@ function MatchCard({ partido, onUpdate }: {
       partido.completado ? 'bg-gray-50' : 'bg-white border border-gray-100 shadow-sm'
     }`}>
       <span className={`flex-1 text-right truncate ${w === 'local' ? 'font-bold text-gray-900' : 'text-gray-500'}`}>
-        {partido.equipoLocal}
+        {partido.equipoLocal} {jugadores[partido.equipoLocal] ? `(${jugadores[partido.equipoLocal]})` : ''}
       </span>
 
       {partido.completado && !editing ? (
         <div className="flex items-center gap-2 shrink-0">
           <span className="font-bold tabular-nums text-gray-900 text-base">
             {partido.golesLocal} – {partido.golesVisitante}
+            {partido.penalesLocal !== null && partido.penalesVisitante !== null && (
+              <span className="text-xs text-gray-400 ml-2 font-medium">({partido.penalesLocal} – {partido.penalesVisitante} P)</span>
+            )}
           </span>
           <button onClick={() => setEditing(true)}
             className="p-1 rounded-lg text-gray-300 hover:text-gray-600 hover:bg-gray-100 transition-all" title="Modificar resultado">
@@ -208,6 +235,17 @@ function MatchCard({ partido, onUpdate }: {
           <span className="text-gray-300 text-xs">–</span>
           <input type="number" min="0" value={gv} onChange={e => setGv(e.target.value)}
             className="w-11 text-center py-1.5 rounded-xl border border-gray-200 bg-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-gray-900/10" />
+          
+          {((['Semifinal', '3er Puesto', '5to puesto', 'Final'].includes(partido.fase) || partido.tipo === 'eliminacion') && partido.ronda !== 'ida') && (
+            <div className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-xl border border-gray-100 shrink-0">
+              <span className="text-[10px] font-bold text-gray-400 uppercase mr-1">Penales:</span>
+              <input type="number" min="0" value={pl} onChange={e => setPl(e.target.value)}
+                className="w-9 text-center py-1 rounded-lg border border-gray-200 bg-white text-xs font-bold focus:outline-none" />
+              <span className="text-gray-300 text-[10px]">–</span>
+              <input type="number" min="0" value={pv} onChange={e => setPv(e.target.value)}
+                className="w-9 text-center py-1 rounded-lg border border-gray-200 bg-white text-xs font-bold focus:outline-none" />
+            </div>
+          )}
           <button onClick={handleSave} disabled={saving || gl === '' || gv === ''}
             className="p-1.5 bg-gray-900 text-white rounded-xl hover:bg-gray-700 disabled:opacity-30 transition-all">
             {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
@@ -222,7 +260,7 @@ function MatchCard({ partido, onUpdate }: {
       )}
 
       <span className={`flex-1 truncate ${w === 'visitante' ? 'font-bold text-gray-900' : 'text-gray-500'}`}>
-        {partido.equipoVisitante}
+        {partido.equipoVisitante} {jugadores[partido.equipoVisitante] ? `(${jugadores[partido.equipoVisitante]})` : ''}
       </span>
 
       {partido.ronda && partido.ronda !== 'unico' && (
@@ -234,7 +272,7 @@ function MatchCard({ partido, onUpdate }: {
 
 // ─── Sub-component: StandingsTable ───────────────────────────────────────────
 
-function StandingsTable({ fase, partidos }: { fase: string; partidos: Partido[] }) {
+function StandingsTable({ fase, partidos, jugadores }: { fase: string; partidos: Partido[]; jugadores: Record<string, string> }) {
   const rows = computeStandings(partidos, fase);
   return (
     <div className="mb-2">
@@ -255,7 +293,7 @@ function StandingsTable({ fase, partidos }: { fase: string; partidos: Partido[] 
                 <td className="py-2 px-3 font-medium flex items-center gap-1.5">
                   {i < 2 && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />}
                   {i === 2 && <span className="w-1.5 h-1.5 rounded-full bg-orange-300 shrink-0" />}
-                  {r.equipo}
+                  {r.equipo} {jugadores[r.equipo] ? `(${jugadores[r.equipo]})` : ''}
                 </td>
                 <td className="text-center py-2">{r.PJ}</td>
                 <td className="text-center py-2">{r.G}</td>
@@ -327,6 +365,8 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
   const isLastFase = faseActual === 'Final';
   const nextWinners = (torneo.tipo === 'eliminacion' && allElimDone && !isLastFase)
     ? getAggregateWinners(elimFasePartidos) : null;
+
+  const jugadores = Object.fromEntries(inscripciones.map(i => [i.equipo, i.jugador]));
 
   const handleDelete = async () => {
     if (!confirmDelete) { setConfirmDelete(true); return; }
@@ -463,11 +503,11 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                             <div className="space-y-1.5">
                               {drawPreviewByFase[f].map((m, i) => (
                                 <div key={i} className="flex items-center bg-gray-50 rounded-2xl px-4 py-2.5 text-sm gap-2">
-                                  <span className="font-medium text-gray-900 truncate flex-1 text-right">{m.equipoLocal}</span>
+                                  <span className="font-medium text-gray-900 truncate flex-1 text-right">{m.equipoLocal} {jugadores[m.equipoLocal] ? `(${jugadores[m.equipoLocal]})` : ''}</span>
                                   <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg shrink-0 capitalize">
                                     {m.ronda === 'unico' ? 'único' : m.ronda}
                                   </span>
-                                  <span className="font-medium text-gray-900 truncate flex-1">{m.equipoVisitante}</span>
+                                  <span className="font-medium text-gray-900 truncate flex-1">{m.equipoVisitante} {jugadores[m.equipoVisitante] ? `(${jugadores[m.equipoVisitante]})` : ''}</span>
                                 </div>
                               ))}
                             </div>
@@ -490,7 +530,7 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                   {allGruposPartidos.length > 0 && (
                     <div className="grid sm:grid-cols-2 gap-4">
                       {(['Grupo A', 'Grupo B'] as const).filter(f => fases.includes(f)).map(f => (
-                        <StandingsTable key={f} fase={f} partidos={partidos} />
+                        <StandingsTable key={f} fase={f} partidos={partidos} jugadores={jugadores} />
                       ))}
                     </div>
                   )}
@@ -501,7 +541,7 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                       <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">{f} — Partidos</p>
                       <div className="space-y-2">
                         {partidos.filter(p => p.fase === f).map(p => (
-                          <MatchCard key={p.id} partido={p} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />
+                          <MatchCard key={p.id} partido={p} jugadores={jugadores} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />
                         ))}
                       </div>
                     </div>
@@ -522,11 +562,11 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                     <div>
                       <div className="flex items-center gap-2 mb-3">
                         <p className="text-xs font-bold text-gray-700 uppercase tracking-widest">Repechaje</p>
-                        <span className="text-xs px-2 py-0.5 rounded-lg bg-orange-50 text-orange-600">3er puesto</span>
+                        <span className="text-xs px-2 py-0.5 rounded-lg bg-orange-50 text-orange-600">5to puesto</span>
                       </div>
                       <div className="space-y-2 ml-4">
                         {partidos.filter(p => p.fase === 'Repechaje').map(p => (
-                          <MatchCard key={p.id} partido={p} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />
+                          <MatchCard key={p.id} partido={p} jugadores={jugadores} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />
                         ))}
                       </div>
                     </div>
@@ -561,13 +601,13 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                             return (
                               <div key={idx} className="p-3 bg-gray-50 rounded-2xl space-y-2">
                                 <div className="flex items-center justify-between text-xs text-gray-500 font-medium">
-                                  <span>{ida.equipoLocal} vs {ida.equipoVisitante}</span>
+                                  <span>{ida.equipoLocal} {jugadores[ida.equipoLocal] ? `(${jugadores[ida.equipoLocal]})` : ''} vs {ida.equipoVisitante} {jugadores[ida.equipoVisitante] ? `(${jugadores[ida.equipoVisitante]})` : ''}</span>
                                   {bothDone && (
                                     <span className="font-bold text-gray-700">Global: {agGl} – {agGv}</span>
                                   )}
                                 </div>
-                                <MatchCard partido={ida} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />
-                                {vuelta && <MatchCard partido={vuelta} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />}
+                                <MatchCard partido={ida} jugadores={jugadores} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />
+                                {vuelta && <MatchCard partido={vuelta} jugadores={jugadores} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />}
                               </div>
                             );
                           });
@@ -592,6 +632,20 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                     </motion.button>
                   )}
 
+                  {/* 3er Puesto */}
+                  {fases.includes('3er Puesto') && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <p className="text-xs font-bold text-gray-700 uppercase tracking-widest">3er Puesto</p>
+                      </div>
+                      <div className="space-y-2 ml-4">
+                        {partidos.filter(p => p.fase === '3er Puesto').map(p => (
+                          <MatchCard key={p.id} partido={p} jugadores={jugadores} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Final */}
                   {fases.includes('Final') && (
                     <div>
@@ -603,9 +657,10 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                           if (fp[0]?.completado) {
                             const gl = fp[0].golesLocal ?? 0, gv = fp[0].golesVisitante ?? 0;
                             const winner = gl > gv ? fp[0].equipoLocal : gv > gl ? fp[0].equipoVisitante : null;
-                            return winner ? (
+                             const winnerDisplay = winner ? (jugadores[winner] ? `${jugadores[winner]} (${winner})` : winner) : null;
+                            return winnerDisplay ? (
                               <span className="text-xs px-2.5 py-0.5 rounded-lg bg-amber-50 text-amber-700 font-semibold">
-                                🏆 {winner}
+                                🏆 {winnerDisplay}
                               </span>
                             ) : null;
                           }
@@ -614,7 +669,7 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                       </div>
                       <div className="space-y-2 ml-4">
                         {partidos.filter(p => p.fase === 'Final').map(p => (
-                          <MatchCard key={p.id} partido={p} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />
+                          <MatchCard key={p.id} partido={p} jugadores={jugadores} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />
                         ))}
                       </div>
                     </div>
@@ -642,7 +697,7 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                         </div>
                         <div className="space-y-2 ml-4">
                           {fp.map(p => (
-                            <MatchCard key={p.id} partido={p} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />
+                            <MatchCard key={p.id} partido={p} jugadores={jugadores} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />
                           ))}
                         </div>
                       </div>
@@ -656,6 +711,20 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                       {generatingRound ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />}
                       Generar {getFaseName(nextWinners.length)}
                     </motion.button>
+                  )}
+
+                  {/* 3er Puesto */}
+                  {fases.includes('3er Puesto') && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <p className="text-xs font-bold text-gray-700 uppercase tracking-widest">3er Puesto</p>
+                      </div>
+                      <div className="space-y-2 ml-4">
+                        {partidos.filter(p => p.fase === '3er Puesto').map(p => (
+                          <MatchCard key={p.id} partido={p} jugadores={jugadores} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />
+                        ))}
+                      </div>
+                    </div>
                   )}
 
                   {allElimDone && !isLastFase && !nextWinners && (
@@ -715,8 +784,14 @@ export default function Fixture() {
     }
   };
 
-  const handleUpdate = async (torneoId: string, partidoId: string, gl: number, gv: number) => {
-    const updated = await api.putPartido(partidoId, { golesLocal: gl, golesVisitante: gv, completado: true });
+  const handleUpdate = async (torneoId: string, partidoId: string, gl: number, gv: number, pl?: number, pv?: number) => {
+    const updated = await api.putPartido(partidoId, {
+      golesLocal: gl,
+      golesVisitante: gv,
+      penalesLocal: pl,
+      penalesVisitante: pv,
+      completado: true
+    });
     setTorneos(prev => prev.map(t =>
       t.id === torneoId ? { ...t, partidos: t.partidos.map(p => p.id === partidoId ? updated : p) } : t
     ));
@@ -764,13 +839,16 @@ export default function Fixture() {
   };
 
   const handleGenerateFinal = async (torneo: TorneoFull, winners: string[]) => {
-    const match: Omit<Partido, 'id'> = {
-      torneo_id: torneo.id, tipo: 'grupos', fase: 'Final', ronda: 'unico',
-      equipoLocal: winners[0], equipoVisitante: winners[1], completado: false,
-    };
-    const saved = await api.postPartido(match);
+    const losers = getAggregateLosers(torneo.partidos.filter(p => p.fase === 'Semifinal'), winners);
+    const newMatches: Omit<Partido, 'id'>[] = [
+      { torneo_id: torneo.id, tipo: 'grupos', fase: 'Final', ronda: 'unico', equipoLocal: winners[0], equipoVisitante: winners[1], completado: false },
+    ];
+    if (losers.length >= 2) {
+      newMatches.push({ torneo_id: torneo.id, tipo: 'grupos', fase: '3er Puesto', ronda: 'unico', equipoLocal: losers[0], equipoVisitante: losers[1], completado: false });
+    }
+    const saved = await Promise.all(newMatches.map(m => api.postPartido(m)));
     setTorneos(prev => prev.map(t =>
-      t.id === torneo.id ? { ...t, partidos: [...t.partidos, saved] } : t
+      t.id === torneo.id ? { ...t, partidos: [...t.partidos, ...saved] } : t
     ));
   };
 
@@ -787,6 +865,19 @@ export default function Fixture() {
       }
     }
     const saved = await Promise.all(newMatches.map(m => api.postPartido(m)));
+
+    // Also generate 3rd place if we are moving to Final
+    if (isFinal) {
+      const losers = getAggregateLosers(torneo.partidos.filter(p => p.fase === 'Semifinal'), winners);
+      if (losers.length >= 2) {
+        const thirdPlaceMatch = await api.postPartido({
+          torneo_id: torneo.id, tipo: 'eliminacion', fase: '3er Puesto', ronda: 'unico',
+          equipoLocal: losers[0], equipoVisitante: losers[1], completado: false
+        });
+        saved.push(thirdPlaceMatch);
+      }
+    }
+
     setTorneos(prev => prev.map(t =>
       t.id === torneo.id ? { ...t, partidos: [...t.partidos, ...saved] } : t
     ));

@@ -8,15 +8,15 @@ import Fixture from './components/Fixture';
 import Stats from './components/Stats';
 
 const TABS = [
-  { id: 'inscripcion', label: 'Inscripción', Icon: Users },
   { id: 'torneo', label: 'Torneo', Icon: Trophy },
+  { id: 'inscripcion', label: 'Inscripción', Icon: Users },
   { id: 'estadisticas', label: 'Estadísticas', Icon: BarChart3 },
 ] as const;
 
 type TabId = (typeof TABS)[number]['id'];
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<TabId>('inscripcion');
+  const [activeTab, setActiveTab] = useState<TabId>('torneo');
 
   return (
     <main className="min-h-screen bg-gray-50">

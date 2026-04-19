@@ -32,6 +32,8 @@ interface PartidoRow {
   equipo_visitante: string;
   goles_local: number | null;
   goles_visitante: number | null;
+  penales_local: number | null;
+  penales_visitante: number | null;
   completado: boolean;
 }
 
@@ -46,6 +48,8 @@ function toPartido(r: PartidoRow): Partido {
     equipoVisitante: r.equipo_visitante,
     golesLocal: r.goles_local,
     golesVisitante: r.goles_visitante,
+    penalesLocal: r.penales_local,
+    penalesVisitante: r.penales_visitante,
     completado: r.completado,
   };
 }
@@ -60,6 +64,8 @@ function partidoToDB(p: Omit<Partido, 'id'>) {
     equipo_visitante: p.equipoVisitante,
     goles_local: p.golesLocal ?? null,
     goles_visitante: p.golesVisitante ?? null,
+    penales_local: p.penalesLocal ?? null,
+    penales_visitante: p.penalesVisitante ?? null,
     completado: p.completado,
   };
 }

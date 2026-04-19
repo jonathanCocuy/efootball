@@ -16,6 +16,8 @@ export interface Partido {
   equipoVisitante: string;
   golesLocal?: number | null;
   golesVisitante?: number | null;
+  penalesLocal?: number | null;
+  penalesVisitante?: number | null;
   completado: boolean;
 }
 

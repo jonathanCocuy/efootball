@@ -68,9 +68,12 @@ export default function Formulario() {
   const ligas = Object.keys(catalogo);
   const equiposDeLiga = liga ? (catalogo[liga] ?? []) : [];
 
-  // Duplicate check only within selected torneo
   const registradosEnTorneo = new Set(
     inscripciones.filter(i => i.torneo_id === torneoId).map(i => i.equipo)
+  );
+
+  const jugadoresRegistradosEnTorneo = new Set(
+    inscripciones.filter(i => i.torneo_id === torneoId).map(i => i.jugador)
   );
 
   const participantesDelTorneo = torneoId
@@ -84,6 +87,10 @@ export default function Formulario() {
     if (!torneoId || !jugador || !liga || !equipo) return;
     if (registradosEnTorneo.has(equipo)) {
       setStatus({ type: 'error', msg: `${equipo} ya está registrado en este torneo.` });
+      return;
+    }
+    if (jugadoresRegistradosEnTorneo.has(jugador)) {
+      setStatus({ type: 'error', msg: `${jugador} ya está registrado en este torneo.` });
       return;
     }
     setLoading(true);
@@ -133,6 +140,9 @@ export default function Formulario() {
   const modalEquiposDeLiga = modal ? (catalogo[modal.liga] ?? []) : [];
   const registradosSinModal = new Set(
     inscripciones.filter(i => i.id !== modal?.inscripcion.id && i.torneo_id === torneoId).map(i => i.equipo)
+  );
+  const jugadoresRegistradosSinModal = new Set(
+    inscripciones.filter(i => i.id !== modal?.inscripcion.id && i.torneo_id === torneoId).map(i => i.jugador)
   );
 
   return (
@@ -191,7 +201,11 @@ export default function Formulario() {
                 <form onSubmit={handleSubmit} className="space-y-5">
                   <Sel label="Jugador" value={jugador} onChange={setJugador}>
                     <option value="">Selecciona un jugador</option>
-                    {JUGADORES.map(n => <option key={n} value={n}>{n}</option>)}
+                    {JUGADORES.map(n => (
+                      <option key={n} value={n} disabled={jugadoresRegistradosEnTorneo.has(n)}>
+                        {n}{jugadoresRegistradosEnTorneo.has(n) ? ' — ya registrado' : ''}
+                      </option>
+                    ))}
                   </Sel>
 
                   <Sel label="Liga" value={liga} onChange={v => { setLiga(v); setEquipo(''); }}>
@@ -280,7 +294,11 @@ export default function Formulario() {
                 <div className="space-y-5">
                   <Sel label="Jugador" value={modal.jugador} onChange={v => setModal(m => m && ({ ...m, jugador: v }))}>
                     <option value="">Selecciona un jugador</option>
-                    {JUGADORES.map(n => <option key={n} value={n}>{n}</option>)}
+                    {JUGADORES.map(n => (
+                      <option key={n} value={n} disabled={jugadoresRegistradosSinModal.has(n)}>
+                        {n}{jugadoresRegistradosSinModal.has(n) ? ' — ya registrado' : ''}
+                      </option>
+                    ))}
                   </Sel>
                   <Sel label="Liga" value={modal.liga} onChange={v => setModal(m => m && ({ ...m, liga: v, equipo: '' }))}>
                     <option value="">Selecciona una liga</option>
