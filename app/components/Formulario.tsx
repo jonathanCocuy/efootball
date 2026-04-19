@@ -39,8 +39,8 @@ function Sel({ label, value, onChange, disabled, children }: {
 }
 
 const EQUIPOS_ALEATORIOS = [
-  'FC Barcelona', 'Real Madrid', 'Atlético de Madrid', 'PSG', 'Liverpool',
-  'Manchester City', 'Manchester United', 'Arsenal', 'Juventus', 'Inter de Milán', 'AC Milan'
+  'FC Barcelona', 'Real Madrid', 'PSG', 'Liverpool',
+  'Manchester City', 'Arsenal', 'Chelsea', 'Atlético de Madrid'
 ];
 
 export default function Formulario() {
