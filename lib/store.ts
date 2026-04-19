@@ -3,6 +3,25 @@ import type { Inscripcion, Partido, Torneo } from './types';
 
 interface InscripcionRow { id: string; torneo_id: string | null; jugador: string; equipo: string; liga: string; }
 
+function toInscripcion(r: InscripcionRow): Inscripcion {
+  return {
+    id: r.id,
+    torneo_id: r.torneo_id ?? undefined,
+    jugador: r.jugador,
+    equipo: r.equipo,
+    liga: r.liga,
+  };
+}
+
+function inscripcionToDB(i: Omit<Inscripcion, 'id'>) {
+  return {
+    torneo_id: i.torneo_id ?? null,
+    jugador: i.jugador,
+    equipo: i.equipo,
+    liga: i.liga,
+  };
+}
+
 interface PartidoRow {
   id: string;
   torneo_id: string | null;
@@ -53,7 +72,7 @@ export async function getAll(col: 'inscripciones' | 'partidos'): Promise<Inscrip
   if (col === 'inscripciones') {
     const { data, error } = await supabase.from('inscripciones').select('*').order('created_at');
     if (error) throw error;
-    return data as InscripcionRow[];
+    return (data as InscripcionRow[]).map(toInscripcion);
   }
   const { data, error } = await supabase.from('partidos').select('*').order('created_at');
   if (error) throw error;
@@ -67,9 +86,10 @@ export async function insert(
   item: Omit<Inscripcion, 'id'> | Omit<Partido, 'id'>
 ): Promise<Inscripcion | Partido> {
   if (col === 'inscripciones') {
-    const { data, error } = await supabase.from('inscripciones').insert(item).select().single();
+    const row = inscripcionToDB(item as Omit<Inscripcion, 'id'>);
+    const { data, error } = await supabase.from('inscripciones').insert(row).select().single();
     if (error) throw error;
-    return data as Inscripcion;
+    return toInscripcion(data as InscripcionRow);
   }
   const row = partidoToDB(item as Omit<Partido, 'id'>);
   const { data, error } = await supabase.from('partidos').insert(row).select().single();
@@ -78,9 +98,10 @@ export async function insert(
 }
 
 export async function updateInscripcion(id: string, update: Omit<Inscripcion, 'id'>): Promise<Inscripcion | null> {
-  const { data, error } = await supabase.from('inscripciones').update(update).eq('id', id).select().single();
+  const row = inscripcionToDB(update);
+  const { data, error } = await supabase.from('inscripciones').update(row).eq('id', id).select().single();
   if (error) return null;
-  return data as Inscripcion;
+  return toInscripcion(data as InscripcionRow);
 }
 
 export async function deleteInscripcion(id: string): Promise<boolean> {
