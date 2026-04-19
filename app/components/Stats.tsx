@@ -277,10 +277,21 @@ export default function Stats() {
           <p className="text-sm text-gray-400 mb-6">{completados.length} partidos completados</p>
           <div className="space-y-2">
             {[...completados].reverse().slice(0, 10).map((p, i) => {
-              const gl = p.golesLocal ?? 0;
-              const gv = p.golesVisitante ?? 0;
+              const gl = p.golesLocal ?? 0, gv = p.golesVisitante ?? 0;
               const pLocal = label(p.equipoLocal, p.torneo_id);
               const pVisitante = label(p.equipoVisitante, p.torneo_id);
+
+              let matchWinner: 'local' | 'visitante' | 'draw' = 'draw';
+              if (gl > gv) matchWinner = 'local';
+              else if (gv > gl) matchWinner = 'visitante';
+              else if (p.penalesLocal != null && p.penalesVisitante != null) {
+                if (p.penalesLocal > p.penalesVisitante) matchWinner = 'local';
+                else if (p.penalesVisitante > p.penalesLocal) matchWinner = 'visitante';
+              }
+
+              const colorL = matchWinner === 'local' ? 'text-emerald-600' : matchWinner === 'visitante' ? 'text-red-600' : 'text-amber-600';
+              const colorV = matchWinner === 'visitante' ? 'text-emerald-600' : matchWinner === 'local' ? 'text-red-600' : 'text-amber-600';
+
               return (
                 <motion.div
                   key={p.id ?? i}
@@ -289,14 +300,14 @@ export default function Stats() {
                   transition={{ delay: i * 0.03 }}
                   className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-2xl text-sm gap-2"
                 >
-                  <span className={`font-medium truncate flex-1 text-right ${gl > gv ? 'text-gray-900' : 'text-gray-400'}`}>
+                  <span className={`font-bold truncate flex-1 text-right ${colorL}`}>
                     {p.equipoLocal} ({pLocal})
                   </span>
                   <span className="font-bold tabular-nums text-gray-900 shrink-0">
                     {gl} – {gv}
                     {p.penalesLocal != null && p.penalesVisitante != null && <span className="text-[10px] text-gray-400 ml-1">({p.penalesLocal}-{p.penalesVisitante}P)</span>}
                   </span>
-                  <span className={`font-medium truncate flex-1 ${gv > gl ? 'text-gray-900' : 'text-gray-400'}`}>
+                  <span className={`font-bold truncate flex-1 ${colorV}`}>
                     {p.equipoVisitante} ({pVisitante})
                   </span>
                   <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-lg shrink-0">{p.fase}</span>
