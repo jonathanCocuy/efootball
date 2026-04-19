@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, CheckCircle, AlertCircle, Loader2, Pencil, Trash2, X, Trophy } from 'lucide-react';
+import { ChevronDown, CheckCircle, AlertCircle, Loader2, Pencil, Trash2, X, Trophy, RefreshCw } from 'lucide-react';
 import { api, type Inscripcion, type Torneo } from '@/lib/api';
 
 const JUGADORES = ['Jonathan', 'Monje', 'Cristian', 'Diego', 'Maicol', 'David', 'Luis', 'Nicolás', 'Juan Pablo'];
@@ -38,7 +38,13 @@ function Sel({ label, value, onChange, disabled, children }: {
   );
 }
 
+const EQUIPOS_ALEATORIOS = [
+  'FC Barcelona', 'Real Madrid', 'Atlético de Madrid', 'PSG', 'Liverpool',
+  'Manchester City', 'Manchester United', 'Arsenal', 'Juventus', 'Inter de Milán', 'AC Milan'
+];
+
 export default function Formulario() {
+  const [modo, setModo] = useState<'manual' | 'aleatorio'>('aleatorio');
   const [torneoId, setTorneoId] = useState('');
   const [torneos, setTorneos] = useState<Torneo[]>([]);
   const [jugador, setJugador] = useState('');
@@ -81,6 +87,24 @@ export default function Formulario() {
     : [];
 
   const torneoActual = torneos.find(t => t.id === torneoId);
+
+  // Random team logic
+  const handleRandomize = () => {
+    const disponibles = EQUIPOS_ALEATORIOS.filter(eq => !registradosEnTorneo.has(eq));
+    if (disponibles.length === 0) {
+      setStatus({ type: 'error', msg: 'No hay más equipos disponibles en la lista aleatoria.' });
+      return;
+    }
+    const random = disponibles[Math.floor(Math.random() * disponibles.length)];
+    setLiga('Especial (Sorteo)');
+    setEquipo(random);
+  };
+
+  useEffect(() => {
+    if (modo === 'aleatorio' && jugador && !equipo) {
+      handleRandomize();
+    }
+  }, [modo, jugador]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -197,9 +221,28 @@ export default function Formulario() {
             >
               {/* Form */}
               <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100">
-                <h2 className="text-xl font-semibold text-gray-900 mb-7">Registro de Jugador</h2>
+                <div className="flex items-center justify-between mb-7">
+                  <h2 className="text-xl font-semibold text-gray-900">Registro</h2>
+
+                  {/* Mode Selector */}
+                  <div className="flex bg-gray-100 p-1 rounded-xl gap-1">
+                    <button
+                      onClick={() => { setModo('manual'); setJugador(''); setLiga(''); setEquipo(''); setStatus(null); }}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${modo === 'manual' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'}`}
+                    >
+                      Manual
+                    </button>
+                    <button
+                      onClick={() => { setModo('aleatorio'); setJugador(''); setLiga(''); setEquipo(''); setStatus(null); }}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${modo === 'aleatorio' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'}`}
+                    >
+                      Sorteo
+                    </button>
+                  </div>
+                </div>
+
                 <form onSubmit={handleSubmit} className="space-y-5">
-                  <Sel label="Jugador" value={jugador} onChange={v => { setJugador(v); setStatus(null); }}>
+                  <Sel label="Jugador" value={jugador} onChange={v => { setJugador(v); setStatus(null); if (modo === 'aleatorio') { setEquipo(''); setLiga(''); } }}>
                     <option value="">Selecciona un jugador</option>
                     {JUGADORES.map(n => (
                       <option key={n} value={n} disabled={jugadoresRegistradosEnTorneo.has(n)}>
@@ -208,34 +251,61 @@ export default function Formulario() {
                     ))}
                   </Sel>
 
-                  <Sel label="Liga" value={liga} onChange={v => { setLiga(v); setEquipo(''); setStatus(null); }}>
-                    <option value="">Selecciona una liga</option>
-                    {ligas.map(l => <option key={l} value={l}>{l}</option>)}
-                  </Sel>
+                  {modo === 'manual' ? (
+                    <>
+                      <Sel label="Liga" value={liga} onChange={v => { setLiga(v); setEquipo(''); setStatus(null); }}>
+                        <option value="">Selecciona una liga</option>
+                        {ligas.map(l => <option key={l} value={l}>{l}</option>)}
+                      </Sel>
 
-                  <Sel label="Equipo" value={equipo} onChange={v => { setEquipo(v); setStatus(null); }} disabled={!liga}>
-                    <option value="">Selecciona un equipo</option>
-                    {equiposDeLiga.map(eq => (
-                      <option key={eq} value={eq} disabled={registradosEnTorneo.has(eq)}>
-                        {eq}{registradosEnTorneo.has(eq) ? ' — ya registrado' : ''}
-                      </option>
-                    ))}
-                  </Sel>
+                      <Sel label="Equipo" value={equipo} onChange={v => { setEquipo(v); setStatus(null); }} disabled={!liga}>
+                        <option value="">Selecciona un equipo</option>
+                        {equiposDeLiga.map(eq => (
+                          <option key={eq} value={eq} disabled={registradosEnTorneo.has(eq)}>
+                            {eq}{registradosEnTorneo.has(eq) ? ' — ya registrado' : ''}
+                          </option>
+                        ))}
+                      </Sel>
+                    </>
+                  ) : (
+                    <div className="space-y-4 p-5 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 animate-in fade-in zoom-in duration-300">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Equipo Asignado</p>
+                        {jugador && equipo && (
+                          <button type="button" onClick={handleRandomize} className="text-indigo-600 hover:text-indigo-800 transition-colors">
+                            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                          </button>
+                        )}
+                      </div>
+                      {equipo ? (
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg">
+                            {equipo.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="text-lg font-bold text-gray-900">{equipo}</p>
+                            <p className="text-xs text-indigo-500 font-medium">Sorteo Aleatorio de Élite</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-400 italic">Selecciona un jugador para el sorteo...</p>
+                      )}
+                    </div>
+                  )}
 
                   {status && (
                     <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
-                      className={`flex items-center gap-2 text-sm p-3.5 rounded-2xl ${
-                        status.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
-                      }`}>
+                      className={`flex items-center gap-2 text-sm p-3.5 rounded-2xl ${status.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+                        }`}>
                       {status.type === 'success' ? <CheckCircle size={15} /> : <AlertCircle size={15} />}
                       {status.msg}
                     </motion.div>
                   )}
 
-                  <button type="submit" disabled={loading}
+                  <button type="submit" disabled={loading || !equipo}
                     className="w-full py-3 bg-gray-900 text-white text-sm font-medium rounded-2xl hover:bg-gray-700 active:scale-[0.98] transition-all disabled:opacity-40 flex items-center justify-center gap-2">
                     {loading && <Loader2 size={14} className="animate-spin" />}
-                    {loading ? 'Registrando...' : 'Registrar jugador'}
+                    {loading ? 'Registrando...' : `Registrar ${modo === 'aleatorio' ? 'Sorteo' : 'Jugador'}`}
                   </button>
                 </form>
               </div>
@@ -316,9 +386,8 @@ export default function Formulario() {
                 <div className="flex gap-3 mt-8">
                   <button onClick={handleDelete} disabled={modalLoading !== null}
                     onMouseLeave={() => setConfirmDelete(false)}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-medium transition-all disabled:opacity-40 ${
-                      confirmDelete ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-red-50 text-red-600 hover:bg-red-100'
-                    }`}>
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-medium transition-all disabled:opacity-40 ${confirmDelete ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-red-50 text-red-600 hover:bg-red-100'
+                      }`}>
                     {modalLoading === 'delete' ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                     {confirmDelete ? '¿Confirmar?' : 'Eliminar'}
                   </button>
