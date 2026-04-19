@@ -9,7 +9,7 @@ export interface Inscripcion {
 export interface Partido {
   id?: string;
   torneo_id?: string;
-  tipo: 'eliminacion' | 'grupos';
+  tipo: 'eliminacion' | 'grupos' | 'liga_playoffs_4' | 'liga_playoffs_2';
   fase: string;
   ronda?: 'ida' | 'vuelta' | 'unico';
   equipoLocal: string;
@@ -24,7 +24,7 @@ export interface Partido {
 export interface Torneo {
   id: string;
   nombre: string;
-  tipo: 'eliminacion' | 'grupos';
+  tipo: 'eliminacion' | 'grupos' | 'liga_playoffs_4' | 'liga_playoffs_2';
   created_at: string;
 }
 

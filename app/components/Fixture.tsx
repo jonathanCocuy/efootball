@@ -11,7 +11,7 @@ import { api, type Inscripcion, type Partido, type Torneo } from '@/lib/api';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type TipoTorneo = 'eliminacion' | 'grupos';
+type TipoTorneo = 'eliminacion' | 'grupos' | 'liga_playoffs_4' | 'liga_playoffs_2';
 
 interface TorneoFull extends Torneo {
   partidos: Partido[];
@@ -37,7 +37,7 @@ function getFaseName(n: number): string {
   return 'Ronda 1';
 }
 
-const FASE_ORDER = ['Grupo A', 'Grupo B', 'Repechaje', 'Ronda 1', 'Octavos de Final', 'Cuartos de Final', 'Semifinal', '3er Puesto', 'Final'];
+const FASE_ORDER = ['Liga', 'Grupo A', 'Grupo B', 'Repechaje', 'Ronda 1', 'Octavos de Final', 'Cuartos de Final', 'Semifinal', '3er Puesto', 'Final'];
 
 function sortFases(fases: string[]): string[] {
   return [...fases].sort((a, b) => {
@@ -81,10 +81,19 @@ function buildGruposMatches(equipos: string[], torneo_id: string): Omit<Partido,
   return matches;
 }
 
+function buildLigaMatches(equipos: string[], torneo_id: string, tipo: TipoTorneo): Omit<Partido, 'id'>[] {
+  const matches: Omit<Partido, 'id'>[] = [];
+  const fase = 'Liga';
+  for (let a = 0; a < equipos.length; a++)
+    for (let b = a + 1; b < equipos.length; b++)
+      matches.push({ torneo_id, tipo, fase, ronda: 'unico', equipoLocal: equipos[a], equipoVisitante: equipos[b], completado: false });
+  return matches;
+}
+
 function buildMatches(equipos: string[], tipo: TipoTorneo, torneo_id: string): Omit<Partido, 'id'>[] {
-  return tipo === 'eliminacion'
-    ? buildEliminacionMatches(equipos, torneo_id)
-    : buildGruposMatches(equipos, torneo_id);
+  if (tipo === 'eliminacion') return buildEliminacionMatches(equipos, torneo_id);
+  if (tipo === 'grupos') return buildGruposMatches(equipos, torneo_id);
+  return buildLigaMatches(equipos, torneo_id, tipo);
 }
 
 function computeStandings(partidos: Partido[], fase: string) {
@@ -341,7 +350,7 @@ function MatchCard({ partido, jugadores, todosLosPartidos, onUpdate }: {
 
 // ─── Sub-component: StandingsTable ───────────────────────────────────────────
 
-function StandingsTable({ fase, partidos, jugadores }: { fase: string; partidos: Partido[]; jugadores: Record<string, string> }) {
+function StandingsTable({ fase, partidos, jugadores, tipo }: { fase: string; partidos: Partido[]; jugadores: Record<string, string>; tipo?: string }) {
   const rows = computeStandings(partidos, fase);
   return (
     <div className="mb-2">
@@ -357,13 +366,21 @@ function StandingsTable({ fase, partidos, jugadores }: { fase: string; partidos:
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-50">
-            {rows.map((r, i) => (
-              <tr key={r.equipo} className={i < 2 ? 'text-gray-900' : 'text-gray-400'}>
-                <td className="py-2 px-3 font-medium flex items-center gap-1.5">
-                  {i < 2 && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />}
-                  {i === 2 && <span className="w-1.5 h-1.5 rounded-full bg-orange-300 shrink-0" />}
-                  {r.equipo} {jugadores[r.equipo] ? `(${jugadores[r.equipo]})` : ''}
-                </td>
+            {rows.map((r, i) => {
+              const isTop2 = i < 2;
+              const isTop4 = i < 4;
+              const isQualified = tipo === 'liga_playoffs_4' ? isTop4 : isTop2;
+              const colorClass = isQualified ? 'text-gray-900' : 'text-gray-400';
+              const dotColor = (tipo === 'liga_playoffs_4' && i < 4) ? 'bg-indigo-400' : 
+                               (tipo !== 'liga_playoffs_4' && i < 2) ? 'bg-indigo-400' : 
+                               (i === 2 && tipo === 'grupos') ? 'bg-orange-300' : '';
+
+              return (
+                <tr key={r.equipo} className={colorClass}>
+                  <td className="py-2 px-3 font-medium flex items-center gap-1.5">
+                    {dotColor && <span className={`w-1.5 h-1.5 rounded-full ${dotColor} shrink-0`} />}
+                    {r.equipo} {jugadores[r.equipo] ? `(${jugadores[r.equipo]})` : ''}
+                  </td>
                 <td className="text-center py-2">{r.PJ}</td>
                 <td className="text-center py-2">{r.G}</td>
                 <td className="text-center py-2">{r.E}</td>
@@ -372,7 +389,8 @@ function StandingsTable({ fase, partidos, jugadores }: { fase: string; partidos:
                 <td className="text-center py-2">{r.GC}</td>
                 <td className="text-center py-2 font-bold text-gray-900">{r.Pts}</td>
               </tr>
-            ))}
+            );
+          })}
           </tbody>
         </table>
       </div>
@@ -429,11 +447,18 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
   const canGenerateFinal = semisCompleted && !hasFinal && !!semiWinners && semiWinners.length >= 2;
 
   // Elimination next round
-  const elimFasePartidos = torneo.tipo === 'eliminacion' ? partidos.filter(p => p.fase === faseActual) : [];
+  const elimFasePartidos = (torneo.tipo === 'eliminacion' || torneo.tipo === 'liga_playoffs_4' || torneo.tipo === 'liga_playoffs_2') ? partidos.filter(p => p.fase === faseActual) : [];
   const allElimDone = elimFasePartidos.length > 0 && elimFasePartidos.every(p => p.completado);
   const isLastFase = faseActual === 'Final';
-  const nextWinners = (torneo.tipo === 'eliminacion' && allElimDone && !isLastFase)
+  const nextWinners = ((torneo.tipo === 'eliminacion' || (torneo.tipo.startsWith('liga_playoffs') && faseActual !== 'Liga')) && allElimDone && !isLastFase)
     ? getAggregateWinners(elimFasePartidos) : null;
+
+  // Liga → Playoffs
+  const ligaPartidos = partidos.filter(p => p.fase === 'Liga');
+  const ligaCompleted = ligaPartidos.length > 0 && ligaPartidos.every(p => p.completado);
+  
+  const canGenerateSemisFromLiga = torneo.tipo === 'liga_playoffs_4' && ligaCompleted && !partidos.some(p => p.fase === 'Semifinal');
+  const canGenerateFinalFromLiga = torneo.tipo === 'liga_playoffs_2' && ligaCompleted && !partidos.some(p => p.fase === 'Final');
 
   const jugadores = Object.fromEntries(inscripciones.map(i => [i.equipo, i.jugador]));
 
@@ -484,9 +509,13 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
             <h3 className="text-lg font-semibold text-gray-900 truncate">{torneo.nombre}</h3>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               <span className={`text-xs font-semibold px-2.5 py-1 rounded-xl ${
-                torneo.tipo === 'eliminacion' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'
+                torneo.tipo === 'eliminacion' ? 'bg-indigo-50 text-indigo-600' : 
+                torneo.tipo === 'grupos' ? 'bg-amber-50 text-amber-600' :
+                'bg-emerald-50 text-emerald-600'
               }`}>
-                {torneo.tipo === 'eliminacion' ? 'Eliminación Directa' : 'Fase de Grupos'}
+                {torneo.tipo === 'eliminacion' ? 'Eliminación Directa' : 
+                 torneo.tipo === 'grupos' ? 'Fase de Grupos' :
+                 torneo.tipo === 'liga_playoffs_4' ? 'Liga + Semis (Top 4)' : 'Liga + Final (Top 2)'}
               </span>
               <span className={`text-xs font-medium px-2.5 py-1 rounded-xl ${status.color}`}>
                 {status.label}
@@ -602,6 +631,37 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                         <StandingsTable key={f} fase={f} partidos={partidos} jugadores={jugadores} />
                       ))}
                     </div>
+                  )}
+
+                  {/* Liga phase */}
+                  {fases.includes('Liga') && (
+                    <div className="space-y-4">
+                      <StandingsTable fase="Liga" partidos={partidos} jugadores={jugadores} tipo={torneo.tipo} />
+                      <div className="space-y-2">
+                        {partidos.filter(p => p.fase === 'Liga').map(p => (
+                          <MatchCard key={p.id} partido={p} jugadores={jugadores} todosLosPartidos={partidos} onUpdate={(id, gl, gv, pl, pv) => onUpdate(torneo.id, id, gl, gv, pl, pv)} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Generate playoffs from Liga */}
+                  {canGenerateSemisFromLiga && (
+                    <motion.button initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                      onClick={handleGenerateKnockout} disabled={generatingKnockout}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-2xl hover:bg-indigo-500 active:scale-[0.97] transition-all disabled:opacity-40">
+                      {generatingKnockout ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />}
+                      Generar Semifinales
+                    </motion.button>
+                  )}
+
+                  {canGenerateFinalFromLiga && (
+                    <motion.button initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                      onClick={handleGenerateFinal} disabled={generatingFinal}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 text-white text-sm font-medium rounded-2xl hover:bg-amber-400 active:scale-[0.97] transition-all disabled:opacity-40">
+                      {generatingFinal ? <Loader2 size={14} className="animate-spin" /> : <Trophy size={14} />}
+                      Generar Final
+                    </motion.button>
                   )}
 
                   {/* Group matches */}
@@ -871,27 +931,42 @@ export default function Fixture() {
   };
 
   const handleGenerateKnockout = async (torneo: TorneoFull) => {
-    const standingsA = computeStandings(torneo.partidos, 'Grupo A');
-    const standingsB = computeStandings(torneo.partidos, 'Grupo B');
-    if (standingsA.length < 2 || standingsB.length < 2) return;
+    let newMatches: Omit<Partido, 'id'>[] = [];
 
-    const [a1, a2, a3] = standingsA;
-    const [b1, b2, b3] = standingsB;
+    if (torneo.tipo === 'grupos') {
+      const standingsA = computeStandings(torneo.partidos, 'Grupo A');
+      const standingsB = computeStandings(torneo.partidos, 'Grupo B');
+      if (standingsA.length < 2 || standingsB.length < 2) return;
 
-    const newMatches: Omit<Partido, 'id'>[] = [
-      { torneo_id: torneo.id, tipo: 'grupos', fase: 'Semifinal', ronda: 'ida', equipoLocal: a1.equipo, equipoVisitante: b2.equipo, completado: false },
-      { torneo_id: torneo.id, tipo: 'grupos', fase: 'Semifinal', ronda: 'vuelta', equipoLocal: b2.equipo, equipoVisitante: a1.equipo, completado: false },
-      { torneo_id: torneo.id, tipo: 'grupos', fase: 'Semifinal', ronda: 'ida', equipoLocal: b1.equipo, equipoVisitante: a2.equipo, completado: false },
-      { torneo_id: torneo.id, tipo: 'grupos', fase: 'Semifinal', ronda: 'vuelta', equipoLocal: a2.equipo, equipoVisitante: b1.equipo, completado: false },
-    ];
+      const [a1, a2, a3] = standingsA;
+      const [b1, b2, b3] = standingsB;
 
-    if (a3 && b3) {
-      newMatches.push({
-        torneo_id: torneo.id, tipo: 'grupos', fase: 'Repechaje', ronda: 'unico',
-        equipoLocal: a3.equipo, equipoVisitante: b3.equipo, completado: false,
-      });
+      newMatches = [
+        { torneo_id: torneo.id, tipo: 'grupos', fase: 'Semifinal', ronda: 'ida', equipoLocal: a1.equipo, equipoVisitante: b2.equipo, completado: false },
+        { torneo_id: torneo.id, tipo: 'grupos', fase: 'Semifinal', ronda: 'vuelta', equipoLocal: b2.equipo, equipoVisitante: a1.equipo, completado: false },
+        { torneo_id: torneo.id, tipo: 'grupos', fase: 'Semifinal', ronda: 'ida', equipoLocal: b1.equipo, equipoVisitante: a2.equipo, completado: false },
+        { torneo_id: torneo.id, tipo: 'grupos', fase: 'Semifinal', ronda: 'vuelta', equipoLocal: a2.equipo, equipoVisitante: b1.equipo, completado: false },
+      ];
+
+      if (a3 && b3) {
+        newMatches.push({
+          torneo_id: torneo.id, tipo: 'grupos', fase: 'Repechaje', ronda: 'unico',
+          equipoLocal: a3.equipo, equipoVisitante: b3.equipo, completado: false,
+        });
+      }
+    } else if (torneo.tipo === 'liga_playoffs_4') {
+      const standings = computeStandings(torneo.partidos, 'Liga');
+      if (standings.length < 4) return;
+      const [t1, t2, t3, t4] = standings;
+      newMatches = [
+        { torneo_id: torneo.id, tipo: 'liga_playoffs_4', fase: 'Semifinal', ronda: 'ida', equipoLocal: t1.equipo, equipoVisitante: t4.equipo, completado: false },
+        { torneo_id: torneo.id, tipo: 'liga_playoffs_4', fase: 'Semifinal', ronda: 'vuelta', equipoLocal: t4.equipo, equipoVisitante: t1.equipo, completado: false },
+        { torneo_id: torneo.id, tipo: 'liga_playoffs_4', fase: 'Semifinal', ronda: 'ida', equipoLocal: t2.equipo, equipoVisitante: t3.equipo, completado: false },
+        { torneo_id: torneo.id, tipo: 'liga_playoffs_4', fase: 'Semifinal', ronda: 'vuelta', equipoLocal: t3.equipo, equipoVisitante: t2.equipo, completado: false },
+      ];
     }
 
+    if (newMatches.length === 0) return;
     const saved = await Promise.all(newMatches.map(m => api.postPartido(m)));
     setTorneos(prev => prev.map(t =>
       t.id === torneo.id ? { ...t, partidos: [...t.partidos, ...saved] } : t
@@ -899,12 +974,24 @@ export default function Fixture() {
   };
 
   const handleGenerateFinal = async (torneo: TorneoFull, winners: string[]) => {
-    const losers = getAggregateLosers(torneo.partidos.filter(p => p.fase === 'Semifinal'), winners);
+    const isLiga2 = torneo.tipo === 'liga_playoffs_2';
+    let finalTeams = winners;
+    let losers: string[] = [];
+
+    if (isLiga2) {
+      const standings = computeStandings(torneo.partidos, 'Liga');
+      if (standings.length < 2) return;
+      finalTeams = [standings[0].equipo, standings[1].equipo];
+      if (standings.length >= 4) losers = [standings[2].equipo, standings[3].equipo];
+    } else {
+      losers = getAggregateLosers(torneo.partidos.filter(p => p.fase === 'Semifinal'), winners);
+    }
+
     const newMatches: Omit<Partido, 'id'>[] = [
-      { torneo_id: torneo.id, tipo: 'grupos', fase: 'Final', ronda: 'unico', equipoLocal: winners[0], equipoVisitante: winners[1], completado: false },
+      { torneo_id: torneo.id, tipo: torneo.tipo as TipoTorneo, fase: 'Final', ronda: 'unico', equipoLocal: finalTeams[0], equipoVisitante: finalTeams[1], completado: false },
     ];
     if (losers.length >= 2) {
-      newMatches.push({ torneo_id: torneo.id, tipo: 'grupos', fase: '3er Puesto', ronda: 'unico', equipoLocal: losers[0], equipoVisitante: losers[1], completado: false });
+      newMatches.push({ torneo_id: torneo.id, tipo: torneo.tipo as TipoTorneo, fase: '3er Puesto', ronda: 'unico', equipoLocal: losers[0], equipoVisitante: losers[1], completado: false });
     }
     const saved = await Promise.all(newMatches.map(m => api.postPartido(m)));
     setTorneos(prev => prev.map(t =>
@@ -974,8 +1061,8 @@ export default function Fixture() {
 
               <div>
                 <p className="text-sm font-medium text-gray-600 mb-2">Tipo de torneo</p>
-                <div className="inline-flex bg-gray-100 p-1 rounded-2xl gap-1">
-                  {(['eliminacion', 'grupos'] as TipoTorneo[]).map(t => (
+                <div className="flex flex-wrap bg-gray-100 p-1 rounded-2xl gap-1">
+                  {(['eliminacion', 'grupos', 'liga_playoffs_4', 'liga_playoffs_2'] as TipoTorneo[]).map(t => (
                     <button key={t} onClick={() => setNewTipo(t)}
                       className={`relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
                         newTipo === t ? 'text-gray-900' : 'text-gray-500 hover:text-gray-700'
@@ -985,8 +1072,12 @@ export default function Fixture() {
                           transition={{ type: 'spring', bounce: 0.2, duration: 0.35 }} />
                       )}
                       <span className="relative z-10 flex items-center gap-1.5">
-                        {t === 'eliminacion' ? <Trophy size={13} /> : <Users size={13} />}
-                        {t === 'eliminacion' ? 'Eliminación Directa' : 'Fase de Grupos'}
+                        {t === 'eliminacion' && <Trophy size={13} />}
+                        {t === 'grupos' && <Users size={13} />}
+                        {t.startsWith('liga') && <Layers size={13} />}
+                        {t === 'eliminacion' ? 'Eliminación Directa' : 
+                         t === 'grupos' ? 'Fase de Grupos' :
+                         t === 'liga_playoffs_4' ? 'Liga + Semis' : 'Liga + Final'}
                       </span>
                     </button>
                   ))}

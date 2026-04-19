@@ -195,7 +195,11 @@ export default function Formulario() {
                 <option value="">— Selecciona un torneo —</option>
                 {torneos.map(t => (
                   <option key={t.id} value={t.id}>
-                    {t.nombre} · {t.tipo === 'eliminacion' ? 'Eliminación' : 'Grupos'}
+                    {t.nombre} · {
+                      t.tipo === 'eliminacion' ? 'Eliminación' : 
+                      t.tipo === 'grupos' ? 'Grupos' :
+                      t.tipo === 'liga_playoffs_4' ? 'Liga + Semis' : 'Liga + Final'
+                    }
                   </option>
                 ))}
               </select>
