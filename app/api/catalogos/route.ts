@@ -12,6 +12,12 @@ const EQUIPOS: Record<string, string[]> = {
   'Bundesliga': ['Bayern Munich', 'Borussia Dortmund', 'RB Leipzig', 'Bayer Leverkusen', 'Wolfsburg', 'Gladbach', 'Union Berlin', 'Stuttgart'],
   'Ligue 1': ['PSG', 'Marseille', 'Lyon', 'Monaco', 'Rennes', 'Lille', 'Nice', 'Lens'],
   'Liga Portugal': ['Porto', 'Benfica', 'Sporting CP', 'Braga', 'Vitória SC', 'Famalicão'],
+  'Liga BetPlay': [
+    'Atlético Nacional', 'Millonarios', 'Santa Fe', 'América de Cali', 
+    'Junior', 'Deportivo Cali', 'Ind. Medellín', 'Once Caldas',
+    'Deportes Tolima', 'Atl. Bucaramanga', 'Dep. Pereira', 'Águilas Doradas',
+    'Dep. Pasto', 'Envigado', 'La Equidad', 'Jaguares', 'Boyacá Chicó', 'Alianza FC'
+  ],
 };
 
 export async function GET() {

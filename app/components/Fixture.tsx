@@ -171,9 +171,10 @@ function getFaseActual(partidos: Partido[]): string {
 
 // ─── Sub-component: MatchCard ─────────────────────────────────────────────────
 
-function MatchCard({ partido, jugadores, onUpdate }: {
+function MatchCard({ partido, jugadores, todosLosPartidos, onUpdate }: {
   partido: Partido;
   jugadores: Record<string, string>;
+  todosLosPartidos: Partido[];
   onUpdate: (id: string, gl: number, gv: number, pl?: number, pv?: number) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(!partido.completado);
@@ -191,11 +192,25 @@ function MatchCard({ partido, jugadores, onUpdate }: {
     if (partido.completado) setEditing(false);
   }, [partido]);
 
+  // Find companion match for global score
+  const companion = (partido.ronda === 'vuelta' || partido.ronda === 'ida')
+    ? todosLosPartidos.find(p => 
+        p.id !== partido.id &&
+        p.fase === partido.fase &&
+        ((p.equipoLocal === partido.equipoLocal && p.equipoVisitante === partido.equipoVisitante) ||
+         (p.equipoLocal === partido.equipoVisitante && p.equipoVisitante === partido.equipoLocal))
+      )
+    : null;
+
+  const globalLocal = (partido.golesLocal ?? 0) + (companion ? (companion.equipoLocal === partido.equipoLocal ? (companion.golesLocal ?? 0) : (companion.golesVisitante ?? 0)) : 0);
+  const globalVisitante = (partido.golesVisitante ?? 0) + (companion ? (companion.equipoVisitante === partido.equipoVisitante ? (companion.golesVisitante ?? 0) : (companion.golesLocal ?? 0)) : 0);
+
   const w = partido.completado
     ? (partido.golesLocal ?? 0) > (partido.golesVisitante ?? 0) ? 'local'
       : (partido.golesVisitante ?? 0) > (partido.golesLocal ?? 0) ? 'visitante'
-        : (partido.penalesLocal ?? 0) > (partido.penalesVisitante ?? 0) ? 'local'
-          : (partido.penalesVisitante ?? 0) > (partido.penalesLocal ?? 0) ? 'visitante' : 'draw'
+        : (partido.penalesLocal != null && partido.penalesVisitante != null)
+          ? (partido.penalesLocal > (partido.penalesVisitante ?? 0) ? 'local' : 'visitante')
+          : 'draw'
     : null;
 
   const handleSave = async () => {
@@ -208,64 +223,79 @@ function MatchCard({ partido, jugadores, onUpdate }: {
   };
 
   return (
-    <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm transition-colors ${
+    <div className={`flex flex-col gap-2 px-4 py-3 rounded-2xl text-sm transition-colors ${
       partido.completado ? 'bg-gray-50' : 'bg-white border border-gray-100 shadow-sm'
     }`}>
-      <span className={`flex-1 text-right truncate ${w === 'local' ? 'font-bold text-gray-900' : 'text-gray-500'}`}>
-        {partido.equipoLocal} {jugadores[partido.equipoLocal] ? `(${jugadores[partido.equipoLocal]})` : ''}
-      </span>
-
-      {partido.completado && !editing ? (
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="font-bold tabular-nums text-gray-900 text-base">
-            {partido.golesLocal} – {partido.golesVisitante}
-            {partido.penalesLocal !== null && partido.penalesVisitante !== null && (
-              <span className="text-xs text-gray-400 ml-2 font-medium">({partido.penalesLocal} – {partido.penalesVisitante} P)</span>
-            )}
+      <div className="flex justify-center gap-2">
+        {partido.ronda && partido.ronda !== 'unico' && (
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-white border border-gray-100 px-2 py-0.5 rounded-lg shadow-sm capitalize">
+            {partido.ronda}
           </span>
-          <button onClick={() => setEditing(true)}
-            className="p-1 rounded-lg text-gray-300 hover:text-gray-600 hover:bg-gray-100 transition-all" title="Modificar resultado">
-            <Pencil size={11} />
-          </button>
-        </div>
-      ) : (
-        <div className="flex items-center gap-1.5 shrink-0">
-          <input type="number" min="0" value={gl} onChange={e => setGl(e.target.value)}
-            className="w-11 text-center py-1.5 rounded-xl border border-gray-200 bg-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-gray-900/10" />
-          <span className="text-gray-300 text-xs">–</span>
-          <input type="number" min="0" value={gv} onChange={e => setGv(e.target.value)}
-            className="w-11 text-center py-1.5 rounded-xl border border-gray-200 bg-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-gray-900/10" />
-          
-          {((['Semifinal', '3er Puesto', '5to puesto', 'Final'].includes(partido.fase) || partido.tipo === 'eliminacion') && partido.ronda !== 'ida') && (
-            <div className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-xl border border-gray-100 shrink-0">
-              <span className="text-[10px] font-bold text-gray-400 uppercase mr-1">Penales:</span>
-              <input type="number" min="0" value={pl} onChange={e => setPl(e.target.value)}
-                className="w-9 text-center py-1 rounded-lg border border-gray-200 bg-white text-xs font-bold focus:outline-none" />
-              <span className="text-gray-300 text-[10px]">–</span>
-              <input type="number" min="0" value={pv} onChange={e => setPv(e.target.value)}
-                className="w-9 text-center py-1 rounded-lg border border-gray-200 bg-white text-xs font-bold focus:outline-none" />
-            </div>
-          )}
-          <button onClick={handleSave} disabled={saving || gl === '' || gv === ''}
-            className="p-1.5 bg-gray-900 text-white rounded-xl hover:bg-gray-700 disabled:opacity-30 transition-all">
-            {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-          </button>
-          {partido.completado && (
-            <button onClick={() => { setEditing(false); setGl(partido.golesLocal?.toString() ?? ''); setGv(partido.golesVisitante?.toString() ?? ''); }}
-              className="p-1.5 text-gray-300 rounded-xl hover:text-gray-600 hover:bg-gray-100 transition-all">
-              <X size={12} />
+        )}
+        {partido.ronda === 'vuelta' && partido.completado && companion?.completado && (
+          <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-lg shadow-sm">
+            Global: {globalLocal} – {globalVisitante}
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center gap-3">
+        <span className={`flex-1 text-right truncate font-bold ${
+          w === 'local' ? 'text-emerald-600' : w === 'visitante' ? 'text-red-600' : w === 'draw' ? 'text-amber-600' : 'text-gray-500'
+        }`}>
+          {partido.equipoLocal} {jugadores[partido.equipoLocal] ? `(${jugadores[partido.equipoLocal]})` : ''}
+        </span>
+
+        {partido.completado && !editing ? (
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="font-bold tabular-nums text-gray-900 text-base bg-white px-3 py-1 rounded-xl border border-gray-100">
+              {partido.golesLocal} – {partido.golesVisitante}
+              {partido.penalesLocal != null && partido.penalesVisitante != null && (
+                <span className="text-xs text-gray-400 ml-2 font-medium">({partido.penalesLocal} – {partido.penalesVisitante} P)</span>
+              )}
+            </span>
+            <button onClick={() => setEditing(true)}
+              className="p-1 rounded-lg text-gray-300 hover:text-gray-600 hover:bg-gray-100 transition-all" title="Modificar resultado">
+              <Pencil size={11} />
             </button>
-          )}
-        </div>
-      )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <input type="number" min="0" value={gl} onChange={e => setGl(e.target.value)}
+              className="w-11 text-center py-1.5 rounded-xl border border-gray-200 bg-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-gray-900/10" />
+            <span className="text-gray-300 text-xs">–</span>
+            <input type="number" min="0" value={gv} onChange={e => setGv(e.target.value)}
+              className="w-11 text-center py-1.5 rounded-xl border border-gray-200 bg-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-gray-900/10" />
+            
+            {((['Semifinal', '3er Puesto', '5to puesto', 'Final'].includes(partido.fase) || partido.tipo === 'eliminacion') && partido.ronda !== 'ida') && (
+              <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-xl border border-gray-100 shrink-0">
+                <span className="text-[10px] font-bold text-gray-400 uppercase mr-1">Penales:</span>
+                <input type="number" min="0" value={pl} onChange={e => setPl(e.target.value)}
+                  className="w-9 text-center py-1 rounded-lg border border-gray-200 bg-gray-50 text-xs font-bold focus:outline-none" />
+                <span className="text-gray-300 text-[10px]">–</span>
+                <input type="number" min="0" value={pv} onChange={e => setPv(e.target.value)}
+                  className="w-9 text-center py-1 rounded-lg border border-gray-200 bg-gray-50 text-xs font-bold focus:outline-none" />
+              </div>
+            )}
+            <button onClick={handleSave} disabled={saving || gl === '' || gv === ''}
+              className="p-1.5 bg-gray-900 text-white rounded-xl hover:bg-gray-700 disabled:opacity-30 transition-all">
+              {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+            </button>
+            {partido.completado && (
+              <button onClick={() => { setEditing(false); setGl(partido.golesLocal?.toString() ?? ''); setGv(partido.golesVisitante?.toString() ?? ''); }}
+                className="p-1.5 text-gray-300 rounded-xl hover:text-gray-600 hover:bg-gray-100 transition-all">
+                <X size={12} />
+              </button>
+            )}
+          </div>
+        )}
 
-      <span className={`flex-1 truncate ${w === 'visitante' ? 'font-bold text-gray-900' : 'text-gray-500'}`}>
-        {partido.equipoVisitante} {jugadores[partido.equipoVisitante] ? `(${jugadores[partido.equipoVisitante]})` : ''}
-      </span>
-
-      {partido.ronda && partido.ronda !== 'unico' && (
-        <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg shrink-0 capitalize">{partido.ronda}</span>
-      )}
+        <span className={`flex-1 truncate font-bold ${
+          w === 'visitante' ? 'text-emerald-600' : w === 'local' ? 'text-red-600' : w === 'draw' ? 'text-amber-600' : 'text-gray-500'
+        }`}>
+          {partido.equipoVisitante} {jugadores[partido.equipoVisitante] ? `(${jugadores[partido.equipoVisitante]})` : ''}
+        </span>
+      </div>
     </div>
   );
 }
@@ -315,7 +345,7 @@ function StandingsTable({ fase, partidos, jugadores }: { fase: string; partidos:
 
 function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, onGenerateFinal, onNextRound }: {
   torneo: TorneoFull;
-  onUpdate: (torneoId: string, partidoId: string, gl: number, gv: number) => Promise<void>;
+  onUpdate: (torneoId: string, partidoId: string, gl: number, gv: number, pl?: number, pv?: number) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onSorteo: (torneo: TorneoFull, shuffledEquipos: string[]) => Promise<void>;
   onGenerateKnockout: (torneo: TorneoFull) => Promise<void>;
@@ -541,7 +571,7 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                       <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">{f} — Partidos</p>
                       <div className="space-y-2">
                         {partidos.filter(p => p.fase === f).map(p => (
-                          <MatchCard key={p.id} partido={p} jugadores={jugadores} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />
+                          <MatchCard key={p.id} partido={p} jugadores={jugadores} todosLosPartidos={partidos} onUpdate={(id, gl, gv, pl, pv) => onUpdate(torneo.id, id, gl, gv, pl, pv)} />
                         ))}
                       </div>
                     </div>
@@ -566,7 +596,7 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                       </div>
                       <div className="space-y-2 ml-4">
                         {partidos.filter(p => p.fase === 'Repechaje').map(p => (
-                          <MatchCard key={p.id} partido={p} jugadores={jugadores} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />
+                          <MatchCard key={p.id} partido={p} jugadores={jugadores} todosLosPartidos={partidos} onUpdate={(id, gl, gv, pl, pv) => onUpdate(torneo.id, id, gl, gv, pl, pv)} />
                         ))}
                       </div>
                     </div>
@@ -595,19 +625,10 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                             const vuelta = sfPartidos.find(p =>
                               p.ronda === 'vuelta' && p.equipoLocal === ida.equipoVisitante && p.equipoVisitante === ida.equipoLocal
                             );
-                            const agGl = (ida.golesLocal ?? 0) + (vuelta?.golesVisitante ?? 0);
-                            const agGv = (ida.golesVisitante ?? 0) + (vuelta?.golesLocal ?? 0);
-                            const bothDone = ida.completado && !!vuelta?.completado;
                             return (
-                              <div key={idx} className="p-3 bg-gray-50 rounded-2xl space-y-2">
-                                <div className="flex items-center justify-between text-xs text-gray-500 font-medium">
-                                  <span>{ida.equipoLocal} {jugadores[ida.equipoLocal] ? `(${jugadores[ida.equipoLocal]})` : ''} vs {ida.equipoVisitante} {jugadores[ida.equipoVisitante] ? `(${jugadores[ida.equipoVisitante]})` : ''}</span>
-                                  {bothDone && (
-                                    <span className="font-bold text-gray-700">Global: {agGl} – {agGv}</span>
-                                  )}
-                                </div>
-                                <MatchCard partido={ida} jugadores={jugadores} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />
-                                {vuelta && <MatchCard partido={vuelta} jugadores={jugadores} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />}
+                              <div key={idx} className="p-3 bg-gray-50 rounded-2xl space-y-2 border border-gray-100">
+                                <MatchCard partido={ida} jugadores={jugadores} todosLosPartidos={partidos} onUpdate={(id, gl, gv, pl, pv) => onUpdate(torneo.id, id, gl, gv, pl, pv)} />
+                                {vuelta && <MatchCard partido={vuelta} jugadores={jugadores} todosLosPartidos={partidos} onUpdate={(id, gl, gv, pl, pv) => onUpdate(torneo.id, id, gl, gv, pl, pv)} />}
                               </div>
                             );
                           });
@@ -640,7 +661,7 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                       </div>
                       <div className="space-y-2 ml-4">
                         {partidos.filter(p => p.fase === '3er Puesto').map(p => (
-                          <MatchCard key={p.id} partido={p} jugadores={jugadores} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />
+                          <MatchCard key={p.id} partido={p} jugadores={jugadores} todosLosPartidos={partidos} onUpdate={(id, gl, gv, pl, pv) => onUpdate(torneo.id, id, gl, gv, pl, pv)} />
                         ))}
                       </div>
                     </div>
@@ -669,7 +690,7 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                       </div>
                       <div className="space-y-2 ml-4">
                         {partidos.filter(p => p.fase === 'Final').map(p => (
-                          <MatchCard key={p.id} partido={p} jugadores={jugadores} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />
+                          <MatchCard key={p.id} partido={p} jugadores={jugadores} todosLosPartidos={partidos} onUpdate={(id, gl, gv, pl, pv) => onUpdate(torneo.id, id, gl, gv, pl, pv)} />
                         ))}
                       </div>
                     </div>
@@ -697,7 +718,7 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                         </div>
                         <div className="space-y-2 ml-4">
                           {fp.map(p => (
-                            <MatchCard key={p.id} partido={p} jugadores={jugadores} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />
+                            <MatchCard key={p.id} partido={p} jugadores={jugadores} todosLosPartidos={partidos} onUpdate={(id, gl, gv, pl, pv) => onUpdate(torneo.id, id, gl, gv, pl, pv)} />
                           ))}
                         </div>
                       </div>
@@ -721,7 +742,7 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                       </div>
                       <div className="space-y-2 ml-4">
                         {partidos.filter(p => p.fase === '3er Puesto').map(p => (
-                          <MatchCard key={p.id} partido={p} jugadores={jugadores} onUpdate={(id, gl, gv) => onUpdate(torneo.id, id, gl, gv)} />
+                          <MatchCard key={p.id} partido={p} jugadores={jugadores} todosLosPartidos={partidos} onUpdate={(id, gl, gv, pl, pv) => onUpdate(torneo.id, id, gl, gv, pl, pv)} />
                         ))}
                       </div>
                     </div>

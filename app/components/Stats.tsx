@@ -298,19 +298,25 @@ export default function Stats() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: i * 0.03 }}
-                  className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-2xl text-sm gap-2"
+                  className="flex flex-col bg-gray-50 rounded-2xl p-3 gap-2 shadow-sm border border-gray-100/50"
                 >
-                  <span className={`font-bold truncate flex-1 text-right ${colorL}`}>
-                    {p.equipoLocal} ({pLocal})
-                  </span>
-                  <span className="font-bold tabular-nums text-gray-900 shrink-0">
-                    {gl} – {gv}
-                    {p.penalesLocal != null && p.penalesVisitante != null && <span className="text-[10px] text-gray-400 ml-1">({p.penalesLocal}-{p.penalesVisitante}P)</span>}
-                  </span>
-                  <span className={`font-bold truncate flex-1 ${colorV}`}>
-                    {p.equipoVisitante} ({pVisitante})
-                  </span>
-                  <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-lg shrink-0">{p.fase}</span>
+                  <div className="flex justify-center">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-white border border-gray-100 px-2 py-0.5 rounded-lg shadow-sm">
+                      {p.fase}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm gap-2">
+                    <span className={`font-bold truncate flex-1 text-right ${colorL}`}>
+                      {p.equipoLocal} ({pLocal})
+                    </span>
+                    <span className="font-bold tabular-nums text-gray-900 shrink-0 bg-white px-3 py-1 rounded-xl border border-gray-100">
+                      {gl} – {gv}
+                      {p.penalesLocal != null && p.penalesVisitante != null && <span className="text-[10px] text-gray-400 ml-1.5 font-medium">({p.penalesLocal}-{p.penalesVisitante}P)</span>}
+                    </span>
+                    <span className={`font-bold truncate flex-1 ${colorV}`}>
+                      {p.equipoVisitante} ({pVisitante})
+                    </span>
+                  </div>
                 </motion.div>
               );
             })}
