@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Target, Shield, Zap, Trophy, Loader2, RefreshCw, Users } from 'lucide-react';
+import { Target, Shield, Zap, Trophy, Loader2, RefreshCw, Users, BarChart3 } from 'lucide-react';
 import { api, type Inscripcion, type Partido } from '@/lib/api';
 
 interface RecordCard {
@@ -23,12 +23,14 @@ export default function Stats() {
     setLoading(true);
     setApiDown(false);
     Promise.all([
-      api.getInscripciones().catch(() => [] as Inscripcion[]),
-      api.getPartidos().catch(() => [] as Partido[]),
+      api.getInscripciones(),
+      api.getPartidos(),
     ]).then(([insc, part]) => {
       setInscripciones(insc);
       setPartidos(part);
-      if (insc.length === 0 && part.length === 0) setApiDown(true);
+    }).catch((err) => {
+      console.error('Error loading stats:', err);
+      setApiDown(true);
     }).finally(() => setLoading(false));
   };
 
@@ -37,16 +39,16 @@ export default function Stats() {
   const completados = partidos.filter(p => p.completado);
 
   // Updated aggregate logic by player (summing across ALL tournaments)
-  const statsPorJugador: Record<string, { golesA: number; golesR: number; partidos: number; wins: number; draws: number; losses: number; pts: number }> = {};
+  const statsPorJugador: Record<string, { golesA: number; golesR: number; partidos: number; wins: number; draws: number; losses: number; pts: number; titulos: number }> = {};
 
   completados.forEach(p => {
     const pLocal = inscripciones.find(i => i.torneo_id === p.torneo_id && i.equipo === p.equipoLocal)?.jugador;
     const pVisitante = inscripciones.find(i => i.torneo_id === p.torneo_id && i.equipo === p.equipoVisitante)?.jugador;
-    
+
     if (!pLocal || !pVisitante) return;
 
-    if (!statsPorJugador[pLocal]) statsPorJugador[pLocal] = { golesA: 0, golesR: 0, partidos: 0, wins: 0, draws: 0, losses: 0, pts: 0 };
-    if (!statsPorJugador[pVisitante]) statsPorJugador[pVisitante] = { golesA: 0, golesR: 0, partidos: 0, wins: 0, draws: 0, losses: 0, pts: 0 };
+    if (!statsPorJugador[pLocal]) statsPorJugador[pLocal] = { golesA: 0, golesR: 0, partidos: 0, wins: 0, draws: 0, losses: 0, pts: 0, titulos: 0 };
+    if (!statsPorJugador[pVisitante]) statsPorJugador[pVisitante] = { golesA: 0, golesR: 0, partidos: 0, wins: 0, draws: 0, losses: 0, pts: 0, titulos: 0 };
 
     const gl = p.golesLocal ?? 0;
     const gv = p.golesVisitante ?? 0;
@@ -58,6 +60,12 @@ export default function Stats() {
     else if (p.penalesLocal != null && p.penalesVisitante != null) {
       if (p.penalesLocal > p.penalesVisitante) winner = 'local';
       else if (p.penalesVisitante > p.penalesLocal) winner = 'visitante';
+    }
+
+    // Increment titles if it's a Final
+    if (p.fase === 'Final') {
+      if (winner === 'local') statsPorJugador[pLocal].titulos++;
+      else if (winner === 'visitante') statsPorJugador[pVisitante].titulos++;
     }
 
     // Local
@@ -83,7 +91,7 @@ export default function Stats() {
 
   const topGoleador = [...generalTable].sort((a, b) => b.golesA - a.golesA)[0];
   const mejorValla = [...generalTable].sort((a, b) => a.golesR - b.golesR)[0];
-  
+
   const mayorGoleada = completados.reduce<Partido | null>((best, p) => {
     const diff = Math.abs((p.golesLocal ?? 0) - (p.golesVisitante ?? 0));
     const bestDiff = best ? Math.abs((best.golesLocal ?? 0) - (best.golesVisitante ?? 0)) : -1;
@@ -132,6 +140,21 @@ export default function Stats() {
     return (
       <div className="flex items-center justify-center py-32 text-gray-300">
         <Loader2 size={28} className="animate-spin" />
+      </div>
+    );
+  }
+
+  // Show "No stats yet" if there are no matches, instead of "API down"
+  if (completados.length === 0 && !apiDown) {
+    return (
+      <div className="flex flex-col items-center justify-center py-32 gap-4 text-center">
+        <div className="bg-gray-100 p-4 rounded-3xl text-gray-400">
+          <BarChart3 size={32} />
+        </div>
+        <div>
+          <p className="text-gray-900 font-semibold">Aún no hay estadísticas</p>
+          <p className="text-gray-400 text-sm mt-1">Completa partidos en la pestaña de Torneo para ver los resultados aquí.</p>
+        </div>
       </div>
     );
   }
@@ -195,7 +218,7 @@ export default function Stats() {
                   <th className="px-4 py-3 font-semibold text-gray-600 text-center">P</th>
                   <th className="px-4 py-3 font-semibold text-gray-600 text-center">GF</th>
                   <th className="px-4 py-3 font-semibold text-gray-600 text-center">GC</th>
-                  <th className="px-4 py-3 font-semibold text-gray-600 text-center">DG</th>
+                  <th className="px-4 py-3 font-semibold text-gray-600 text-center text-amber-500">🏆</th>
                   <th className="px-4 py-3 font-semibold text-gray-600 text-center text-indigo-600">Pts</th>
                 </tr>
               </thead>
@@ -212,7 +235,7 @@ export default function Stats() {
                     <td className="px-4 py-3.5 text-center text-gray-600">{row.losses}</td>
                     <td className="px-4 py-3.5 text-center text-gray-600">{row.golesA}</td>
                     <td className="px-4 py-3.5 text-center text-gray-600">{row.golesR}</td>
-                    <td className="px-4 py-3.5 text-center text-gray-600">{row.golesA - row.golesR}</td>
+                    <td className="px-4 py-3.5 text-center font-bold text-amber-500">{row.titulos}</td>
                     <td className="px-4 py-3.5 text-center font-bold text-indigo-600">{row.pts}</td>
                   </tr>
                 ))}
@@ -237,14 +260,14 @@ export default function Stats() {
             {finales.map((final, i) => {
               const gl = final.golesLocal ?? 0;
               const gv = final.golesVisitante ?? 0;
-              
+
               // Correct winner taking penalties into account
               let winnerEquipo = final.equipoLocal;
               if (gv > gl) winnerEquipo = final.equipoVisitante;
               else if (gl === gv) {
                 if ((final.penalesVisitante ?? 0) > (final.penalesLocal ?? 0)) winnerEquipo = final.equipoVisitante;
               }
-              
+
               const winnerJugador = label(winnerEquipo, final.torneo_id);
               return (
                 <motion.div

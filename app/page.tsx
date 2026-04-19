@@ -9,7 +9,7 @@ import Stats from './components/Stats';
 
 const TABS = [
   { id: 'torneo', label: 'Torneo', Icon: Trophy },
-  { id: 'inscripcion', label: 'Inscripción', Icon: Users },
+  { id: 'inscripcion', label: 'Regístrate', Icon: Users },
   { id: 'estadisticas', label: 'Estadísticas', Icon: BarChart3 },
 ] as const;
 

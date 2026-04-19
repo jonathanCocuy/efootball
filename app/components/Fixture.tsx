@@ -183,6 +183,7 @@ function MatchCard({ partido, jugadores, todosLosPartidos, onUpdate }: {
   const [pl, setPl] = useState(partido.penalesLocal?.toString() ?? '');
   const [pv, setPv] = useState(partido.penalesVisitante?.toString() ?? '');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setGl(partido.golesLocal?.toString() ?? '');
@@ -190,6 +191,7 @@ function MatchCard({ partido, jugadores, todosLosPartidos, onUpdate }: {
     setPl(partido.penalesLocal?.toString() ?? '');
     setPv(partido.penalesVisitante?.toString() ?? '');
     if (partido.completado) setEditing(false);
+    setError(null);
   }, [partido]);
 
   // Find companion match for global score
@@ -215,10 +217,40 @@ function MatchCard({ partido, jugadores, todosLosPartidos, onUpdate }: {
 
   const handleSave = async () => {
     if (gl === '' || gv === '' || !partido.id) return;
+
+    const numL = parseInt(gl);
+    const numV = parseInt(gv);
+    const penL = pl !== '' ? parseInt(pl) : null;
+    const penV = pv !== '' ? parseInt(pv) : null;
+
+    // Validation for knockout matches
+    const isKnockout = ['Semifinal', '3er Puesto', '5to puesto', 'Final'].includes(partido.fase) || partido.tipo === 'eliminacion';
+    const isSecondLegOrUnique = partido.ronda === 'vuelta' || partido.ronda === 'unico';
+
+    if (isKnockout && isSecondLegOrUnique) {
+      let isDraw = false;
+      if (partido.ronda === 'unico') {
+        isDraw = numL === numV;
+      } else if (partido.ronda === 'vuelta' && companion) {
+        const cLocalGoals = companion.equipoLocal === partido.equipoLocal ? (companion.golesLocal ?? 0) : (companion.golesVisitante ?? 0);
+        const cVisitGoals = companion.equipoVisitante === partido.equipoVisitante ? (companion.golesVisitante ?? 0) : (companion.golesLocal ?? 0);
+        isDraw = (numL + cLocalGoals) === (numV + cVisitGoals);
+      }
+
+      if (isDraw) {
+        if (penL === null || penV === null) {
+          setError('Se requiere definición por penales');
+          return;
+        }
+        if (penL === penV) {
+          setError('La tanda de penales debe tener un ganador');
+          return;
+        }
+      }
+    }
+
     setSaving(true);
-    const penaltiesL = pl !== '' ? parseInt(pl) : undefined;
-    const penaltiesV = pv !== '' ? parseInt(pv) : undefined;
-    await onUpdate(partido.id, parseInt(gl), parseInt(gv), penaltiesL, penaltiesV);
+    await onUpdate(partido.id, numL, numV, penL ?? undefined, penV ?? undefined);
     setSaving(false);
   };
 
@@ -261,19 +293,19 @@ function MatchCard({ partido, jugadores, todosLosPartidos, onUpdate }: {
           </div>
         ) : (
           <div className="flex items-center gap-1.5 shrink-0">
-            <input type="number" min="0" value={gl} onChange={e => setGl(e.target.value)}
+            <input type="number" min="0" value={gl} onChange={e => { setGl(e.target.value); setError(null); }}
               className="w-11 text-center py-1.5 rounded-xl border border-gray-200 bg-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-gray-900/10" />
             <span className="text-gray-300 text-xs">–</span>
-            <input type="number" min="0" value={gv} onChange={e => setGv(e.target.value)}
+            <input type="number" min="0" value={gv} onChange={e => { setGv(e.target.value); setError(null); }}
               className="w-11 text-center py-1.5 rounded-xl border border-gray-200 bg-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-gray-900/10" />
             
             {((['Semifinal', '3er Puesto', '5to puesto', 'Final'].includes(partido.fase) || partido.tipo === 'eliminacion') && partido.ronda !== 'ida') && (
               <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-xl border border-gray-100 shrink-0">
                 <span className="text-[10px] font-bold text-gray-400 uppercase mr-1">Penales:</span>
-                <input type="number" min="0" value={pl} onChange={e => setPl(e.target.value)}
+                <input type="number" min="0" value={pl} onChange={e => { setPl(e.target.value); setError(null); }}
                   className="w-9 text-center py-1 rounded-lg border border-gray-200 bg-gray-50 text-xs font-bold focus:outline-none" />
                 <span className="text-gray-300 text-[10px]">–</span>
-                <input type="number" min="0" value={pv} onChange={e => setPv(e.target.value)}
+                <input type="number" min="0" value={pv} onChange={e => { setPv(e.target.value); setError(null); }}
                   className="w-9 text-center py-1 rounded-lg border border-gray-200 bg-gray-50 text-xs font-bold focus:outline-none" />
               </div>
             )}
@@ -296,6 +328,13 @@ function MatchCard({ partido, jugadores, todosLosPartidos, onUpdate }: {
           {partido.equipoVisitante} {jugadores[partido.equipoVisitante] ? `(${jugadores[partido.equipoVisitante]})` : ''}
         </span>
       </div>
+
+      {error && (
+        <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+          className="text-[11px] font-medium text-red-500 text-center bg-red-50 py-1 rounded-lg border border-red-100">
+          {error}
+        </motion.p>
+      )}
     </div>
   );
 }

@@ -98,7 +98,7 @@ export default function Formulario() {
     try {
       const nueva = await api.postInscripcion({ jugador, equipo, liga, torneo_id: torneoId });
       setInscripciones(prev => [...prev, nueva]);
-      setStatus({ type: 'success', msg: `${jugador} inscrito con ${equipo}.` });
+      setStatus({ type: 'success', msg: `${jugador} registrado con ${equipo}.` });
       setJugador(''); setLiga(''); setEquipo('');
     } catch {
       setStatus({ type: 'error', msg: 'No se pudo conectar con el servidor.' });
@@ -199,7 +199,7 @@ export default function Formulario() {
               <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100">
                 <h2 className="text-xl font-semibold text-gray-900 mb-7">Registro de Jugador</h2>
                 <form onSubmit={handleSubmit} className="space-y-5">
-                  <Sel label="Jugador" value={jugador} onChange={setJugador}>
+                  <Sel label="Jugador" value={jugador} onChange={v => { setJugador(v); setStatus(null); }}>
                     <option value="">Selecciona un jugador</option>
                     {JUGADORES.map(n => (
                       <option key={n} value={n} disabled={jugadoresRegistradosEnTorneo.has(n)}>
@@ -208,12 +208,12 @@ export default function Formulario() {
                     ))}
                   </Sel>
 
-                  <Sel label="Liga" value={liga} onChange={v => { setLiga(v); setEquipo(''); }}>
+                  <Sel label="Liga" value={liga} onChange={v => { setLiga(v); setEquipo(''); setStatus(null); }}>
                     <option value="">Selecciona una liga</option>
                     {ligas.map(l => <option key={l} value={l}>{l}</option>)}
                   </Sel>
 
-                  <Sel label="Equipo" value={equipo} onChange={setEquipo} disabled={!liga}>
+                  <Sel label="Equipo" value={equipo} onChange={v => { setEquipo(v); setStatus(null); }} disabled={!liga}>
                     <option value="">Selecciona un equipo</option>
                     {equiposDeLiga.map(eq => (
                       <option key={eq} value={eq} disabled={registradosEnTorneo.has(eq)}>
@@ -286,7 +286,7 @@ export default function Formulario() {
               className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={e => e.stopPropagation()}>
               <div className="bg-white rounded-3xl shadow-xl w-full max-w-md p-8">
                 <div className="flex items-center justify-between mb-7">
-                  <h3 className="text-lg font-semibold text-gray-900">Editar inscripción</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">Editar registro</h3>
                   <button onClick={closeModal} className="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all">
                     <X size={16} />
                   </button>
