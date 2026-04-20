@@ -41,12 +41,20 @@ const FASE_ORDER = ['Liga', 'Grupo A', 'Grupo B', 'Repechaje', 'Ronda 1', 'Octav
 
 function sortFases(fases: string[]): string[] {
   return [...fases].sort((a, b) => {
-    const ia = FASE_ORDER.indexOf(a);
-    const ib = FASE_ORDER.indexOf(b);
+    // Special handling for "Fecha X"
+    if (a.includes(' - Fecha ') && b.includes(' - Fecha ')) {
+      const [baseA, fechaA] = a.split(' - Fecha ');
+      const [baseB, fechaB] = b.split(' - Fecha ');
+      if (baseA === baseB) return parseInt(fechaA) - parseInt(fechaB);
+    }
+    
+    const ia = FASE_ORDER.indexOf(a.split(' - ')[0]);
+    const ib = FASE_ORDER.indexOf(b.split(' - ')[0]);
     if (ia === -1 && ib === -1) return a.localeCompare(b);
     if (ia === -1) return 1;
     if (ib === -1) return -1;
-    return ia - ib;
+    if (ia !== ib) return ia - ib;
+    return a.localeCompare(b);
   });
 }
 
@@ -67,37 +75,60 @@ function buildEliminacionMatches(equipos: string[], torneo_id: string): Omit<Par
 
 function buildGruposMatches(equipos: string[], torneo_id: string): Omit<Partido, 'id'>[] {
   const half = Math.ceil(equipos.length / 2);
-  const grupos: [string[], string][] = [
-    [equipos.slice(0, half), 'A'],
-    [equipos.slice(half), 'B'],
+  const grA = equipos.slice(0, half);
+  const grB = equipos.slice(half);
+  
+  return [
+    ...buildLigaMatches(grA, torneo_id, 'grupos', 'Grupo A'),
+    ...buildLigaMatches(grB, torneo_id, 'grupos', 'Grupo B')
   ];
-  const matches: Omit<Partido, 'id'>[] = [];
-  for (const [grupo, letra] of grupos) {
-    const fase = `Grupo ${letra}`;
-    for (let a = 0; a < grupo.length; a++)
-      for (let b = a + 1; b < grupo.length; b++)
-        matches.push({ torneo_id, tipo: 'grupos', fase, ronda: 'unico', equipoLocal: grupo[a], equipoVisitante: grupo[b], completado: false });
-  }
-  return matches;
 }
 
-function buildLigaMatches(equipos: string[], torneo_id: string, tipo: TipoTorneo): Omit<Partido, 'id'>[] {
+function buildLigaMatches(equipos: string[], torneo_id: string, tipo: TipoTorneo, baseFase: string = 'Liga'): Omit<Partido, 'id'>[] {
+  const n = equipos.length;
+  if (n < 2) return [];
+
+  const teams = [...equipos];
+  const isOdd = n % 2 !== 0;
+  if (isOdd) teams.push('BYE'); // Placeholder for odd number of teams
+
+  const pool = [...teams];
+  const numRounds = pool.length - 1;
+  const matchesPerRound = pool.length / 2;
   const matches: Omit<Partido, 'id'>[] = [];
-  const fase = 'Liga';
-  for (let a = 0; a < equipos.length; a++)
-    for (let b = a + 1; b < equipos.length; b++)
-      matches.push({ torneo_id, tipo, fase, ronda: 'unico', equipoLocal: equipos[a], equipoVisitante: equipos[b], completado: false });
+
+  for (let r = 0; r < numRounds; r++) {
+    const fecha = r + 1;
+    const fase = `${baseFase} - Fecha ${fecha}`;
+    
+    for (let m = 0; m < matchesPerRound; m++) {
+      const home = pool[m];
+      const away = pool[pool.length - 1 - m];
+      
+      if (home !== 'BYE' && away !== 'BYE') {
+        // Randomize home/away for variety
+        const [l, v] = Math.random() > 0.5 ? [home, away] : [away, home];
+        matches.push({ torneo_id, tipo, fase, ronda: 'unico', equipoLocal: l, equipoVisitante: v, completado: false });
+      }
+    }
+    // Rotate pool: keep first team, rotate others
+    pool.splice(1, 0, pool.pop()!);
+  }
+  
   return matches;
 }
 
 function buildMatches(equipos: string[], tipo: TipoTorneo, torneo_id: string): Omit<Partido, 'id'>[] {
-  if (tipo === 'eliminacion') return buildEliminacionMatches(equipos, torneo_id);
-  if (tipo === 'grupos') return buildGruposMatches(equipos, torneo_id);
-  return buildLigaMatches(equipos, torneo_id, tipo);
+  let matches: Omit<Partido, 'id'>[] = [];
+  if (tipo === 'eliminacion') matches = buildEliminacionMatches(equipos, torneo_id);
+  else if (tipo === 'grupos') matches = buildGruposMatches(equipos, torneo_id);
+  else matches = buildLigaMatches(equipos, torneo_id, tipo);
+  
+  return shuffle(matches);
 }
 
-function computeStandings(partidos: Partido[], fase: string) {
-  const fp = partidos.filter(p => p.fase === fase);
+function computeStandings(partidos: Partido[], faseOrPrefix: string) {
+  const fp = partidos.filter(p => p.fase === faseOrPrefix || p.fase.startsWith(faseOrPrefix + ' - '));
   const equipos = [...new Set([...fp.map(p => p.equipoLocal), ...fp.map(p => p.equipoVisitante)])];
   return equipos.map(eq => {
     const jugados = fp.filter(p => p.completado && (p.equipoLocal === eq || p.equipoVisitante === eq));
@@ -622,73 +653,80 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
               )}
 
               {/* Matches content */}
-              {torneo.tipo === 'grupos' ? (
+              {(torneo.tipo === 'grupos' || torneo.tipo.startsWith('liga')) ? (
                 <>
                   {/* Standings */}
-                  {allGruposPartidos.length > 0 && (
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      {(['Grupo A', 'Grupo B'] as const).filter(f => fases.includes(f)).map(f => (
-                        <StandingsTable key={f} fase={f} partidos={partidos} jugadores={jugadores} />
-                      ))}
-                    </div>
-                  )}
+                  <div className={`grid gap-4 ${torneo.tipo === 'grupos' ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
+                    {['Liga', 'Grupo A', 'Grupo B'].map(base => {
+                      const hasFase = fases.some(f => f === base || f.startsWith(base + ' - '));
+                      if (!hasFase) return null;
+                      return <StandingsTable key={base} fase={base} partidos={partidos} jugadores={jugadores} tipo={torneo.tipo} />;
+                    })}
+                  </div>
 
-                  {/* Liga phase */}
-                  {fases.includes('Liga') && (
-                    <div className="space-y-4">
-                      <StandingsTable fase="Liga" partidos={partidos} jugadores={jugadores} tipo={torneo.tipo} />
-                      <div className="space-y-2">
-                        {partidos.filter(p => p.fase === 'Liga').map(p => (
-                          <MatchCard key={p.id} partido={p} jugadores={jugadores} todosLosPartidos={partidos} onUpdate={(id, gl, gv, pl, pv) => onUpdate(torneo.id, id, gl, gv, pl, pv)} />
-                        ))}
+                  {/* Grouped Matches by Fase (Fechas) */}
+                  {['Liga', 'Grupo A', 'Grupo B'].map(base => {
+                    const baseFases = fases.filter(f => f === base || f.startsWith(base + ' - '));
+                    if (baseFases.length === 0) return null;
+                    return (
+                      <div key={base} className="space-y-6 mt-6">
+                        <div className="flex items-center justify-between border-b border-gray-50 pb-2">
+                          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{base} — Partidos</p>
+                        </div>
+                        <div className="space-y-6">
+                          {baseFases.map(f => (
+                            <div key={f} className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-gray-50 px-3 py-1 rounded-lg">
+                                  {f.includes(' - ') ? f.split(' - ')[1] : f}
+                                </span>
+                                <div className="h-px bg-gray-50 flex-1" />
+                              </div>
+                              <div className="grid gap-2">
+                                {partidos.filter(p => p.fase === f).map(p => (
+                                  <MatchCard key={p.id} partido={p} jugadores={jugadores} todosLosPartidos={partidos} onUpdate={(id, gl, gv, pl, pv) => onUpdate(torneo.id, id, gl, gv, pl, pv)} />
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })}
 
                   {/* Generate playoffs from Liga */}
-                  {canGenerateSemisFromLiga && (
-                    <motion.button initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                      onClick={handleGenerateKnockout} disabled={generatingKnockout}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-2xl hover:bg-indigo-500 active:scale-[0.97] transition-all disabled:opacity-40">
-                      {generatingKnockout ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />}
-                      Generar Semifinales
-                    </motion.button>
-                  )}
+                  <div className="flex flex-wrap gap-3 mt-6">
+                    {canGenerateSemisFromLiga && (
+                      <motion.button initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                        onClick={handleGenerateKnockout} disabled={generatingKnockout}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-2xl hover:bg-indigo-500 active:scale-[0.97] transition-all disabled:opacity-40">
+                        {generatingKnockout ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />}
+                        Generar Semifinales
+                      </motion.button>
+                    )}
 
-                  {canGenerateFinalFromLiga && (
-                    <motion.button initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                      onClick={handleGenerateFinal} disabled={generatingFinal}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 text-white text-sm font-medium rounded-2xl hover:bg-amber-400 active:scale-[0.97] transition-all disabled:opacity-40">
-                      {generatingFinal ? <Loader2 size={14} className="animate-spin" /> : <Trophy size={14} />}
-                      Generar Final
-                    </motion.button>
-                  )}
-
-                  {/* Group matches */}
-                  {(['Grupo A', 'Grupo B'] as const).filter(f => fases.includes(f)).map(f => (
-                    <div key={f}>
-                      <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">{f} — Partidos</p>
-                      <div className="space-y-2">
-                        {partidos.filter(p => p.fase === f).map(p => (
-                          <MatchCard key={p.id} partido={p} jugadores={jugadores} todosLosPartidos={partidos} onUpdate={(id, gl, gv, pl, pv) => onUpdate(torneo.id, id, gl, gv, pl, pv)} />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Generate knockout */}
-                  {canGenerateKnockout && (
-                    <motion.button initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                      onClick={handleGenerateKnockout} disabled={generatingKnockout}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-2xl hover:bg-indigo-500 active:scale-[0.97] transition-all disabled:opacity-40">
-                      {generatingKnockout ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />}
-                      Generar Eliminatoria
-                    </motion.button>
-                  )}
+                    {canGenerateFinalFromLiga && (
+                      <motion.button initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                        onClick={handleGenerateFinal} disabled={generatingFinal}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 text-white text-sm font-medium rounded-2xl hover:bg-amber-400 active:scale-[0.97] transition-all disabled:opacity-40">
+                        {generatingFinal ? <Loader2 size={14} className="animate-spin" /> : <Trophy size={14} />}
+                        Generar Final
+                      </motion.button>
+                    )}
+                    
+                    {canGenerateKnockout && (
+                      <motion.button initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                        onClick={handleGenerateKnockout} disabled={generatingKnockout}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-2xl hover:bg-indigo-500 active:scale-[0.97] transition-all disabled:opacity-40">
+                        {generatingKnockout ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />}
+                        Generar Eliminatoria
+                      </motion.button>
+                    )}
+                  </div>
 
                   {/* Repechaje */}
                   {fases.includes('Repechaje') && (
-                    <div>
+                    <div className="mt-8">
                       <div className="flex items-center gap-2 mb-3">
                         <p className="text-xs font-bold text-gray-700 uppercase tracking-widest">Repechaje</p>
                         <span className="text-xs px-2 py-0.5 rounded-lg bg-orange-50 text-orange-600">5to puesto</span>
@@ -703,7 +741,7 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
 
                   {/* Semifinal */}
                   {fases.includes('Semifinal') && (
-                    <div>
+                    <div className="mt-8">
                       <div className="flex items-center gap-3 mb-3">
                         <p className="text-xs font-bold text-gray-700 uppercase tracking-widest">Semifinal</p>
                         {(() => {
@@ -737,7 +775,7 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                   )}
 
                   {semisCompleted && !hasFinal && !semiWinners && (
-                    <p className="text-xs text-amber-600 bg-amber-50 px-4 py-2.5 rounded-2xl">
+                    <p className="text-xs text-amber-600 bg-amber-50 px-4 py-2.5 rounded-2xl mt-4">
                       Hay empates en el global — define el ganador editando el marcador.
                     </p>
                   )}
@@ -746,7 +784,7 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                   {canGenerateFinal && (
                     <motion.button initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
                       onClick={handleGenerateFinal} disabled={generatingFinal}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 text-white text-sm font-medium rounded-2xl hover:bg-amber-400 active:scale-[0.97] transition-all disabled:opacity-40">
+                      className="mt-6 flex items-center gap-2 px-5 py-2.5 bg-amber-500 text-white text-sm font-medium rounded-2xl hover:bg-amber-400 active:scale-[0.97] transition-all disabled:opacity-40">
                       {generatingFinal ? <Loader2 size={14} className="animate-spin" /> : <Trophy size={14} />}
                       Generar Final
                     </motion.button>
@@ -754,7 +792,7 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
 
                   {/* 3er Puesto */}
                   {fases.includes('3er Puesto') && (
-                    <div>
+                    <div className="mt-8">
                       <div className="flex items-center gap-2 mb-3">
                         <p className="text-xs font-bold text-gray-700 uppercase tracking-widest">3er Puesto</p>
                       </div>
@@ -768,7 +806,7 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
 
                   {/* Final */}
                   {fases.includes('Final') && (
-                    <div>
+                    <div className="mt-8">
                       <div className="flex items-center gap-2 mb-3">
                         <Trophy size={14} className="text-amber-500" />
                         <p className="text-xs font-bold text-gray-700 uppercase tracking-widest">Final</p>
