@@ -650,24 +650,111 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                     </div>
 
                     {drawEquipos && Object.keys(drawPreviewByFase).length > 0 && (
-                      <div className="space-y-3">
-                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Vista previa del sorteo</p>
-                        {sortFases(Object.keys(drawPreviewByFase)).map(f => (
-                          <div key={f}>
-                            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">{f}</p>
-                            <div className="space-y-1.5">
-                              {drawPreviewByFase[f].map((m, i) => (
-                                <div key={i} className="flex items-center bg-gray-50 rounded-2xl px-4 py-2.5 text-sm gap-2">
-                                  <span className="font-medium text-gray-900 truncate flex-1 text-right">{m.equipoLocal} {jugadores[m.equipoLocal] ? `(${jugadores[m.equipoLocal]})` : ''}</span>
-                                  <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg shrink-0 capitalize">
-                                    {m.ronda === 'unico' ? 'único' : m.ronda}
-                                  </span>
-                                  <span className="font-medium text-gray-900 truncate flex-1">{m.equipoVisitante} {jugadores[m.equipoVisitante] ? `(${jugadores[m.equipoVisitante]})` : ''}</span>
-                                </div>
-                              ))}
-                            </div>
+                      <div className="space-y-6">
+                        <div className="flex items-center justify-between border-b border-gray-50 pb-2">
+                          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Vista previa del sorteo</p>
+                        </div>
+
+                        {torneo.tipo === 'grupos' && (
+                          <div className="grid grid-cols-2 gap-4">
+                            {(() => {
+                              const half = Math.ceil(drawEquipos.length / 2);
+                              const grA = drawEquipos.slice(0, half);
+                              const grB = drawEquipos.slice(half);
+                              return (
+                                <>
+                                  <div className="bg-gray-50/50 rounded-3xl p-4 border border-gray-100">
+                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-3 text-center">Grupo A</p>
+                                    <div className="space-y-1.5">
+                                      {grA.map(eq => (
+                                        <div key={eq} className="bg-white px-3 py-2 rounded-xl text-sm font-semibold text-gray-900 shadow-sm border border-gray-100 flex flex-col sm:flex-row items-center justify-center text-center sm:gap-1">
+                                          {eq} <span className="text-gray-400 font-medium text-xs">{jugadores[eq] ? `(${jugadores[eq]})` : ''}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div className="bg-gray-50/50 rounded-3xl p-4 border border-gray-100">
+                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-3 text-center">Grupo B</p>
+                                    <div className="space-y-1.5">
+                                      {grB.map(eq => (
+                                        <div key={eq} className="bg-white px-3 py-2 rounded-xl text-sm font-semibold text-gray-900 shadow-sm border border-gray-100 flex flex-col sm:flex-row items-center justify-center text-center sm:gap-1">
+                                          {eq} <span className="text-gray-400 font-medium text-xs">{jugadores[eq] ? `(${jugadores[eq]})` : ''}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </>
+                              );
+                            })()}
                           </div>
-                        ))}
+                        )}
+
+                        {torneo.tipo === 'grupos' ? (() => {
+                           const allPhases = Object.keys(drawPreviewByFase);
+                           const fechasSet = new Set(allPhases.map(f => f.split(' - ')[1]).filter(Boolean));
+                           const fechas = Array.from(fechasSet).sort((a, b) => parseInt(a.replace('Fecha ', '')) - parseInt(b.replace('Fecha ', '')));
+                           return (
+                             <div className="space-y-5">
+                               {fechas.map(f => (
+                                 <div key={f} className="space-y-3">
+                                    <div className="flex items-center gap-3">
+                                      <div className="h-px bg-gray-50 flex-1" />
+                                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-gray-50 px-4 py-1 rounded-xl text-center">
+                                        {f}
+                                      </span>
+                                      <div className="h-px bg-gray-50 flex-1" />
+                                    </div>
+                                    <div className="grid gap-3">
+                                      {['Grupo A', 'Grupo B'].map(base => {
+                                        const phaseName = `${base} - ${f}`;
+                                        const matches = drawPreviewByFase[phaseName];
+                                        if (!matches) return null;
+                                        return (
+                                          <div key={base} className="space-y-1.5">
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">{base}</p>
+                                            {matches.map((m, i) => (
+                                              <div key={i} className="flex items-center bg-gray-50 rounded-2xl px-4 py-2.5 text-sm gap-2 border border-gray-100">
+                                                <span className="font-semibold text-gray-900 truncate flex-1 text-right">{m.equipoLocal} <span className="text-gray-400 font-medium ml-0.5">{jugadores[m.equipoLocal] ? `(${jugadores[m.equipoLocal]})` : ''}</span></span>
+                                                <span className="text-[10px] font-bold text-gray-400 bg-white border border-gray-100 px-2 py-0.5 rounded-lg shrink-0 capitalize">
+                                                  {m.ronda === 'unico' ? 'único' : m.ronda}
+                                                </span>
+                                                <span className="font-semibold text-gray-900 truncate flex-1">{m.equipoVisitante} <span className="text-gray-400 font-medium ml-0.5">{jugadores[m.equipoVisitante] ? `(${jugadores[m.equipoVisitante]})` : ''}</span></span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                 </div>
+                               ))}
+                             </div>
+                           );
+                        })() : (
+                          <div className="space-y-4">
+                            {sortFases(Object.keys(drawPreviewByFase)).map(f => (
+                              <div key={f}>
+                                <div className="flex items-center gap-3 mb-3">
+                                  <div className="h-px bg-gray-50 flex-1" />
+                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-gray-50 px-4 py-1 rounded-xl text-center">
+                                    {f.includes(' - ') ? f.split(' - ')[1] : f}
+                                  </span>
+                                  <div className="h-px bg-gray-50 flex-1" />
+                                </div>
+                                <div className="space-y-1.5">
+                                  {drawPreviewByFase[f].map((m, i) => (
+                                    <div key={i} className="flex items-center bg-gray-50 rounded-2xl px-4 py-2.5 text-sm gap-2 border border-gray-100">
+                                      <span className="font-semibold text-gray-900 truncate flex-1 text-right">{m.equipoLocal} <span className="text-gray-400 font-medium ml-0.5">{jugadores[m.equipoLocal] ? `(${jugadores[m.equipoLocal]})` : ''}</span></span>
+                                      <span className="text-[10px] font-bold text-gray-400 bg-white border border-gray-100 px-2 py-0.5 rounded-lg shrink-0 capitalize">
+                                        {m.ronda === 'unico' ? 'único' : m.ronda}
+                                      </span>
+                                      <span className="font-semibold text-gray-900 truncate flex-1">{m.equipoVisitante} <span className="text-gray-400 font-medium ml-0.5">{jugadores[m.equipoVisitante] ? `(${jugadores[m.equipoVisitante]})` : ''}</span></span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -691,34 +778,78 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                   </div>
 
                   {/* Grouped Matches by Fase (Fechas) */}
-                  {['Liga', 'Grupo A', 'Grupo B'].map(base => {
-                    const baseFases = fases.filter(f => f === base || f.startsWith(base + ' - '));
-                    if (baseFases.length === 0) return null;
+                  {torneo.tipo === 'grupos' ? (() => {
+                    const groupPartidos = partidos.filter(p => p.fase.startsWith('Grupo A') || p.fase.startsWith('Grupo B'));
+                    if (groupPartidos.length === 0) return null;
+                    
+                    const fechasSet = new Set(groupPartidos.map(p => p.fase.split(' - ')[1]).filter(Boolean));
+                    const fechas = Array.from(fechasSet).sort((a, b) => parseInt(a.replace('Fecha ', '')) - parseInt(b.replace('Fecha ', '')));
+                    
                     return (
-                      <div key={base} className="space-y-6 mt-6">
+                      <div className="space-y-6 mt-6">
                         <div className="flex items-center justify-between border-b border-gray-50 pb-2">
-                          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{base} — Partidos</p>
+                          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Fase de Grupos — Partidos</p>
                         </div>
                         <div className="space-y-6">
-                          {baseFases.map(f => (
+                          {fechas.map(f => (
                             <div key={f} className="space-y-2">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-gray-50 px-3 py-1 rounded-lg">
-                                  {f.includes(' - ') ? f.split(' - ')[1] : f}
+                              <div className="flex items-center gap-3">
+                                <div className="h-px bg-gray-50 flex-1" />
+                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-gray-50 px-4 py-1 rounded-xl text-center">
+                                  {f}
                                 </span>
                                 <div className="h-px bg-gray-50 flex-1" />
                               </div>
                               <div className="grid gap-2">
-                                {partidos.filter(p => p.fase === f).map(p => (
-                                  <MatchCard key={p.id} partido={p} jugadores={jugadores} todosLosPartidos={partidos} onUpdate={(id, gl, gv, pl, pv) => onUpdate(torneo.id, id, gl, gv, pl, pv)} />
-                                ))}
+                                {['Grupo A', 'Grupo B'].map(base => {
+                                  const matches = groupPartidos.filter(p => p.fase === `${base} - ${f}`);
+                                  if (matches.length === 0) return null;
+                                  return (
+                                    <div key={base} className="space-y-2">
+                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">{base}</p>
+                                      {matches.map(p => (
+                                        <MatchCard key={p.id} partido={p} jugadores={jugadores} todosLosPartidos={partidos} onUpdate={(id, gl, gv, pl, pv) => onUpdate(torneo.id, id, gl, gv, pl, pv)} />
+                                      ))}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
                           ))}
                         </div>
                       </div>
                     );
-                  })}
+                  })() : (
+                    ['Liga'].map(base => {
+                      const baseFases = fases.filter(f => f === base || f.startsWith(base + ' - '));
+                      if (baseFases.length === 0) return null;
+                      return (
+                        <div key={base} className="space-y-6 mt-6">
+                          <div className="flex items-center justify-between border-b border-gray-50 pb-2">
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{base} — Partidos</p>
+                          </div>
+                          <div className="space-y-6">
+                            {baseFases.map(f => (
+                              <div key={f} className="space-y-2">
+                                <div className="flex items-center gap-3">
+                                  <div className="h-px bg-gray-50 flex-1" />
+                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-gray-50 px-4 py-1 rounded-xl text-center">
+                                    {f.includes(' - ') ? f.split(' - ')[1] : f}
+                                  </span>
+                                  <div className="h-px bg-gray-50 flex-1" />
+                                </div>
+                                <div className="grid gap-2">
+                                  {partidos.filter(p => p.fase === f).map(p => (
+                                    <MatchCard key={p.id} partido={p} jugadores={jugadores} todosLosPartidos={partidos} onUpdate={(id, gl, gv, pl, pv) => onUpdate(torneo.id, id, gl, gv, pl, pv)} />
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
 
                   {/* Generate playoffs from Liga */}
                   <div className="flex flex-wrap gap-3 mt-6">
