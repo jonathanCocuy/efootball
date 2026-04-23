@@ -37,7 +37,7 @@ function getFaseName(n: number): string {
   return 'Ronda 1';
 }
 
-const FASE_ORDER = ['Liga', 'Grupo A', 'Grupo B', 'Repechaje', 'Ronda 1', 'Octavos de Final', 'Cuartos de Final', 'Semifinal', '3er Puesto', 'Final'];
+const FASE_ORDER = ['Liga', 'Grupo A', 'Grupo B', 'Repechaje', 'Ronda 1', 'Octavos de Final', 'Cuartos de Final', 'Semifinal', '5to Puesto', '3er Puesto', 'Final'];
 
 function sortFases(fases: string[]): string[] {
   return [...fases].sort((a, b) => {
@@ -215,9 +215,10 @@ function MatchCard({ partido, jugadores, todosLosPartidos, onUpdate }: {
   partido: Partido;
   jugadores: Record<string, string>;
   todosLosPartidos: Partido[];
-  onUpdate: (id: string, gl: number, gv: number, pl?: number, pv?: number) => Promise<void>;
+  onUpdate: (id: string, gl: number, gv: number, pl?: number | null, pv?: number | null) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(!partido.completado);
+  const [showPenalties, setShowPenalties] = useState(partido.penalesLocal != null);
   const [gl, setGl] = useState(partido.golesLocal?.toString() ?? '');
   const [gv, setGv] = useState(partido.golesVisitante?.toString() ?? '');
   const [pl, setPl] = useState(partido.penalesLocal?.toString() ?? '');
@@ -230,6 +231,7 @@ function MatchCard({ partido, jugadores, todosLosPartidos, onUpdate }: {
     setGv(partido.golesVisitante?.toString() ?? '');
     setPl(partido.penalesLocal?.toString() ?? '');
     setPv(partido.penalesVisitante?.toString() ?? '');
+    setShowPenalties(partido.penalesLocal != null);
     if (partido.completado) setEditing(false);
     setError(null);
   }, [partido]);
@@ -260,11 +262,11 @@ function MatchCard({ partido, jugadores, todosLosPartidos, onUpdate }: {
 
     const numL = parseInt(gl);
     const numV = parseInt(gv);
-    const penL = pl !== '' ? parseInt(pl) : null;
-    const penV = pv !== '' ? parseInt(pv) : null;
+    let finalPenL = pl !== '' ? parseInt(pl) : null;
+    let finalPenV = pv !== '' ? parseInt(pv) : null;
 
     // Validation for knockout matches
-    const isKnockout = ['Semifinal', '3er Puesto', '5to puesto', 'Final'].includes(partido.fase) || partido.tipo === 'eliminacion';
+    const isKnockout = ['Semifinal', '3er Puesto', '5to Puesto', 'Final'].includes(partido.fase) || partido.tipo === 'eliminacion';
     const isSecondLegOrUnique = partido.ronda === 'vuelta' || partido.ronda === 'unico';
 
     if (isKnockout && isSecondLegOrUnique) {
@@ -278,19 +280,30 @@ function MatchCard({ partido, jugadores, todosLosPartidos, onUpdate }: {
       }
 
       if (isDraw) {
-        if (penL === null || penV === null) {
+        if (!showPenalties) {
+          setShowPenalties(true);
+          setError('Empate detectado. Ingresa el resultado de los penales.');
+          return;
+        }
+        if (finalPenL === null || finalPenV === null) {
           setError('Se requiere definición por penales');
           return;
         }
-        if (penL === penV) {
+        if (finalPenL === finalPenV) {
           setError('La tanda de penales debe tener un ganador');
           return;
         }
+      } else {
+        finalPenL = null;
+        finalPenV = null;
       }
+    } else {
+      finalPenL = null;
+      finalPenV = null;
     }
 
     setSaving(true);
-    await onUpdate(partido.id, numL, numV, penL ?? undefined, penV ?? undefined);
+    await onUpdate(partido.id, numL, numV, finalPenL, finalPenV);
     setSaving(false);
   };
 
@@ -322,9 +335,6 @@ function MatchCard({ partido, jugadores, todosLosPartidos, onUpdate }: {
           <div className="flex items-center gap-2 shrink-0">
             <span className="font-bold tabular-nums text-gray-900 text-base bg-white px-3 py-1 rounded-xl border border-gray-100">
               {partido.golesLocal} – {partido.golesVisitante}
-              {partido.penalesLocal != null && partido.penalesVisitante != null && (
-                <span className="text-xs text-gray-400 ml-2 font-medium">({partido.penalesLocal} – {partido.penalesVisitante} P)</span>
-              )}
             </span>
             <button onClick={() => setEditing(true)}
               className="p-1 rounded-lg text-gray-300 hover:text-gray-600 hover:bg-gray-100 transition-all" title="Modificar resultado">
@@ -339,16 +349,6 @@ function MatchCard({ partido, jugadores, todosLosPartidos, onUpdate }: {
             <input type="number" min="0" value={gv} onChange={e => { setGv(e.target.value); setError(null); }}
               className="w-11 text-center py-1.5 rounded-xl border border-gray-200 bg-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-gray-900/10" />
             
-            {((['Semifinal', '3er Puesto', '5to puesto', 'Final'].includes(partido.fase) || partido.tipo === 'eliminacion') && partido.ronda !== 'ida') && (
-              <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-xl border border-gray-100 shrink-0">
-                <span className="text-[10px] font-bold text-gray-400 uppercase mr-1">Penales:</span>
-                <input type="number" min="0" value={pl} onChange={e => { setPl(e.target.value); setError(null); }}
-                  className="w-9 text-center py-1 rounded-lg border border-gray-200 bg-gray-50 text-xs font-bold focus:outline-none" />
-                <span className="text-gray-300 text-[10px]">–</span>
-                <input type="number" min="0" value={pv} onChange={e => { setPv(e.target.value); setError(null); }}
-                  className="w-9 text-center py-1 rounded-lg border border-gray-200 bg-gray-50 text-xs font-bold focus:outline-none" />
-              </div>
-            )}
             <button onClick={handleSave} disabled={saving || gl === '' || gv === ''}
               className="p-1.5 bg-gray-900 text-white rounded-xl hover:bg-gray-700 disabled:opacity-30 transition-all">
               {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
@@ -368,6 +368,32 @@ function MatchCard({ partido, jugadores, todosLosPartidos, onUpdate }: {
           {partido.equipoVisitante} {jugadores[partido.equipoVisitante] ? `(${jugadores[partido.equipoVisitante]})` : ''}
         </span>
       </div>
+
+      {editing && showPenalties && (
+        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="flex justify-center overflow-hidden mt-1 mb-1">
+          <div className="flex flex-col items-center gap-1.5 bg-gray-50 px-4 py-2.5 rounded-xl border border-gray-200 shadow-inner w-full max-w-[180px]">
+             <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Penales</span>
+             <div className="flex items-center gap-2">
+               <input type="number" min="0" value={pl} onChange={e => { setPl(e.target.value); setError(null); }}
+                 className="w-12 text-center py-1.5 rounded-lg border border-gray-200 bg-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-gray-900/10" />
+               <span className="text-gray-300 text-sm font-bold">–</span>
+               <input type="number" min="0" value={pv} onChange={e => { setPv(e.target.value); setError(null); }}
+                 className="w-12 text-center py-1.5 rounded-lg border border-gray-200 bg-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-gray-900/10" />
+             </div>
+          </div>
+        </motion.div>
+      )}
+
+      {!editing && partido.penalesLocal != null && partido.penalesVisitante != null && (
+        <div className="flex justify-center mt-0.5 mb-1">
+          <div className="flex items-center gap-1.5 bg-white px-3 py-1 rounded-xl border border-gray-100 shadow-sm">
+             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Penales:</span>
+             <span className="text-xs font-bold text-gray-900">
+               {partido.penalesLocal} – {partido.penalesVisitante}
+             </span>
+          </div>
+        </div>
+      )}
 
       {error && (
         <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
@@ -433,7 +459,7 @@ function StandingsTable({ fase, partidos, jugadores, tipo }: { fase: string; par
 
 function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, onGenerateFinal, onNextRound }: {
   torneo: TorneoFull;
-  onUpdate: (torneoId: string, partidoId: string, gl: number, gv: number, pl?: number, pv?: number) => Promise<void>;
+  onUpdate: (torneoId: string, partidoId: string, gl: number, gv: number, pl?: number | null, pv?: number | null) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onSorteo: (torneo: TorneoFull, shuffledEquipos: string[]) => Promise<void>;
   onGenerateKnockout: (torneo: TorneoFull) => Promise<void>;
@@ -465,9 +491,9 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
   drawPreview?.forEach(m => { (drawPreviewByFase[m.fase] ??= []).push(m); });
 
   // Grupos phase tracking
-  const allGruposPartidos = partidos.filter(p => p.fase === 'Grupo A' || p.fase === 'Grupo B');
+  const allGruposPartidos = partidos.filter(p => p.fase.startsWith('Grupo A') || p.fase.startsWith('Grupo B'));
   const gruposCompleted = allGruposPartidos.length > 0 && allGruposPartidos.every(p => p.completado);
-  const hasKnockout = partidos.some(p => p.fase === 'Semifinal' || p.fase === 'Repechaje');
+  const hasKnockout = partidos.some(p => p.fase === 'Semifinal' || p.fase === 'Repechaje' || p.fase === '5to Puesto');
   const canGenerateKnockout = gruposCompleted && !hasKnockout;
 
   // Semi → Final
@@ -481,11 +507,11 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
   const elimFasePartidos = (torneo.tipo === 'eliminacion' || torneo.tipo === 'liga_playoffs_4' || torneo.tipo === 'liga_playoffs_2') ? partidos.filter(p => p.fase === faseActual) : [];
   const allElimDone = elimFasePartidos.length > 0 && elimFasePartidos.every(p => p.completado);
   const isLastFase = faseActual === 'Final';
-  const nextWinners = ((torneo.tipo === 'eliminacion' || (torneo.tipo.startsWith('liga_playoffs') && faseActual !== 'Liga')) && allElimDone && !isLastFase)
+  const nextWinners = ((torneo.tipo === 'eliminacion' || (torneo.tipo.startsWith('liga_playoffs') && !faseActual.startsWith('Liga'))) && allElimDone && !isLastFase)
     ? getAggregateWinners(elimFasePartidos) : null;
 
   // Liga → Playoffs
-  const ligaPartidos = partidos.filter(p => p.fase === 'Liga');
+  const ligaPartidos = partidos.filter(p => p.fase.startsWith('Liga'));
   const ligaCompleted = ligaPartidos.length > 0 && ligaPartidos.every(p => p.completado);
   
   const canGenerateSemisFromLiga = torneo.tipo === 'liga_playoffs_4' && ligaCompleted && !partidos.some(p => p.fase === 'Semifinal');
@@ -719,20 +745,19 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                         onClick={handleGenerateKnockout} disabled={generatingKnockout}
                         className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-2xl hover:bg-indigo-500 active:scale-[0.97] transition-all disabled:opacity-40">
                         {generatingKnockout ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />}
-                        Generar Eliminatoria
+                        {torneo.tipo === 'grupos' ? 'Generar Semifinales' : 'Generar Eliminatoria'}
                       </motion.button>
                     )}
                   </div>
 
-                  {/* Repechaje */}
-                  {fases.includes('Repechaje') && (
+                  {/* 5to Puesto / Repechaje */}
+                  {(fases.includes('5to Puesto') || fases.includes('Repechaje')) && (
                     <div className="mt-8">
                       <div className="flex items-center gap-2 mb-3">
-                        <p className="text-xs font-bold text-gray-700 uppercase tracking-widest">Repechaje</p>
-                        <span className="text-xs px-2 py-0.5 rounded-lg bg-orange-50 text-orange-600">5to puesto</span>
+                        <p className="text-xs font-bold text-gray-700 uppercase tracking-widest">5to Puesto</p>
                       </div>
                       <div className="space-y-2 ml-4">
-                        {partidos.filter(p => p.fase === 'Repechaje').map(p => (
+                        {partidos.filter(p => p.fase === '5to Puesto' || p.fase === 'Repechaje').map(p => (
                           <MatchCard key={p.id} partido={p} jugadores={jugadores} todosLosPartidos={partidos} onUpdate={(id, gl, gv, pl, pv) => onUpdate(torneo.id, id, gl, gv, pl, pv)} />
                         ))}
                       </div>
@@ -786,7 +811,7 @@ function TorneoCard({ torneo, onUpdate, onDelete, onSorteo, onGenerateKnockout, 
                       onClick={handleGenerateFinal} disabled={generatingFinal}
                       className="mt-6 flex items-center gap-2 px-5 py-2.5 bg-amber-500 text-white text-sm font-medium rounded-2xl hover:bg-amber-400 active:scale-[0.97] transition-all disabled:opacity-40">
                       {generatingFinal ? <Loader2 size={14} className="animate-spin" /> : <Trophy size={14} />}
-                      Generar Final
+                      Generar Fase Final
                     </motion.button>
                   )}
 
@@ -942,7 +967,7 @@ export default function Fixture() {
     }
   };
 
-  const handleUpdate = async (torneoId: string, partidoId: string, gl: number, gv: number, pl?: number, pv?: number) => {
+  const handleUpdate = async (torneoId: string, partidoId: string, gl: number, gv: number, pl?: number | null, pv?: number | null) => {
     const updated = await api.putPartido(partidoId, {
       golesLocal: gl,
       golesVisitante: gv,
@@ -985,13 +1010,6 @@ export default function Fixture() {
         { torneo_id: torneo.id, tipo: 'grupos', fase: 'Semifinal', ronda: 'ida', equipoLocal: b1.equipo, equipoVisitante: a2.equipo, completado: false },
         { torneo_id: torneo.id, tipo: 'grupos', fase: 'Semifinal', ronda: 'vuelta', equipoLocal: a2.equipo, equipoVisitante: b1.equipo, completado: false },
       ];
-
-      if (a3 && b3) {
-        newMatches.push({
-          torneo_id: torneo.id, tipo: 'grupos', fase: 'Repechaje', ronda: 'unico',
-          equipoLocal: a3.equipo, equipoVisitante: b3.equipo, completado: false,
-        });
-      }
     } else if (torneo.tipo === 'liga_playoffs_4') {
       const standings = computeStandings(torneo.partidos, 'Liga');
       if (standings.length < 4) return;
@@ -1031,6 +1049,17 @@ export default function Fixture() {
     if (losers.length >= 2) {
       newMatches.push({ torneo_id: torneo.id, tipo: torneo.tipo as TipoTorneo, fase: '3er Puesto', ronda: 'unico', equipoLocal: losers[0], equipoVisitante: losers[1], completado: false });
     }
+
+    if (torneo.tipo === 'grupos') {
+      const standingsA = computeStandings(torneo.partidos, 'Grupo A');
+      const standingsB = computeStandings(torneo.partidos, 'Grupo B');
+      if (standingsA.length >= 3 && standingsB.length >= 3) {
+        const lastA = standingsA[standingsA.length - 1].equipo;
+        const lastB = standingsB[standingsB.length - 1].equipo;
+        newMatches.push({ torneo_id: torneo.id, tipo: 'grupos', fase: '5to Puesto', ronda: 'unico', equipoLocal: lastA, equipoVisitante: lastB, completado: false });
+      }
+    }
+
     const saved = await Promise.all(newMatches.map(m => api.postPartido(m)));
     setTorneos(prev => prev.map(t =>
       t.id === torneo.id ? { ...t, partidos: [...t.partidos, ...saved] } : t

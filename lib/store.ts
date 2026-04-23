@@ -124,6 +124,8 @@ export async function patch(col: 'partidos', id: string, update: Partial<Partido
   if (update.completado !== undefined) row.completado = update.completado;
   if (update.fase !== undefined) row.fase = update.fase;
   if (update.ronda !== undefined) row.ronda = update.ronda ?? null;
+  if (update.penalesLocal !== undefined) row.penales_local = update.penalesLocal ?? null;
+  if (update.penalesVisitante !== undefined) row.penales_visitante = update.penalesVisitante ?? null;
 
   const { data, error } = await supabase.from(col).update(row).eq('id', id).select().single();
   if (error) return null;
